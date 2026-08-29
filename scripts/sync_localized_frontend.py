@@ -223,10 +223,35 @@ def compare_built_to_embedded() -> None:
     built = validate_frontend(FRONTEND_DIR / "dist")
     embedded = validate_frontend(WEB_DIR)
     if built != embedded:
+        detail = _tree_diff(FRONTEND_DIR / "dist", WEB_DIR)
         raise ValueError(
             "Embedded frontend does not match the freshly built dist "
             f"(built {built}, embedded {embedded})"
+            + (f"; first differences: {detail}" if detail else "")
         )
+
+
+def _tree_diff(left: Path, right: Path, limit: int = 10) -> list:
+    names = sorted(
+        {
+            p.relative_to(root).as_posix()
+            for root in (left, right)
+            for p in root.glob("**/*")
+            if p.is_file()
+        }
+    )
+    differences = []
+    for name in names:
+        left_file, right_file = left / name, right / name
+        if not left_file.is_file() or not right_file.is_file():
+            differences.append(f"{name}: present only on one side")
+        elif left_file.read_bytes().replace(b"\r\n", b"\n") != right_file.read_bytes().replace(
+            b"\r\n", b"\n"
+        ):
+            differences.append(f"{name}: content differs")
+        if len(differences) >= limit:
+            break
+    return differences
 
 
 def main() -> None:
