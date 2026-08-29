@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-08-29
+
+### Changed
+
+- **First release from the clean monorepo** — Frontend sources now live in `frontend/` inside this repository and the embedded build in `lncrawl/server/web/` is pinned by `frontend-manifest.json` instead of an external frontend commit SHA, so every release tag rebuilds the whole product from one checkout.
+- **The interface runs on system fonts** — The UI uses the system CJK font stack (Microsoft YaHei / PingFang SC / Noto Sans CJK SC) and the reader keeps its bundled OFL fonts; the 1.1.x-era Cabinet Grotesk and Switzer files are gone, so no non-redistributable font ships with the app.
+- **The Windows portable ZIP is the default release** — The release workflow rebuilds the frontend from the same tag, verifies both executables, and publishes the portable ZIP plus one full source archive with licenses, third-party notices and SHA256 checksums; installers are no longer built by default.
+- **Distribution docs and CI target the public workflow** — Support, contribution, security and issue templates point to this repository in Chinese, CI validates the embedded frontend on the same platform it was built for, and the release guard refuses to overwrite a published version.
+
 ## [1.2.4] - 2026-08-29
 
 ### Changed
