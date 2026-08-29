@@ -148,7 +148,9 @@ jobs:
           Get-ChildItem dist -File |
             Get-FileHash -Algorithm SHA256 |
             ForEach-Object {
-              "$($_.Hash.ToLowerInvariant()) *$($_.Name)"
+              # FileHashInfo has Path, not Name; the leaf name must be kept
+              # alongside the digest for the checksums to be verifiable.
+              "$($_.Hash.ToLowerInvariant()) *$(Split-Path $_.Path -Leaf)"
             } |
             Set-Content dist\SHA256SUMS.txt -Encoding ASCII
 

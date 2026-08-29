@@ -413,7 +413,9 @@ def _release_workflow_violations(workflow: str) -> List[str]:
         violations.append("release is not triggered by push tags")
     if "releases/tags" not in workflow or ".draft" not in workflow:
         violations.append("does not guard against overwriting a published release")
-    if "$($_.Name)" not in workflow:
+    if "Split-Path $_.Path -Leaf" not in workflow:
+        # Get-FileHash results carry Path, not Name; "$($_.Name)" silently
+        # produced an empty basename in the first real release run.
         violations.append("checksums do not record portable basenames")
     return violations
 
@@ -436,7 +438,7 @@ jobs:
   build:
     steps:
       - run: gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag" --jq '.draft'
-      - run: Write-Output "$($_.Name)"
+      - run: Write-Output "$(Split-Path $_.Path -Leaf)"
 """
     if not _release_workflow_violations(unsafe):
         raise AssertionError("Unsafe release workflow fixture was accepted")
