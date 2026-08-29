@@ -191,6 +191,9 @@ jobs:
             if ($_.Exception.Message -notlike "*Native command failed (1)*") {
               throw
             }
+            # The Actions pwsh wrapper exits with $LASTEXITCODE after the script;
+            # clear gh's 1 so an expected 404 does not fail the whole step.
+            $global:LASTEXITCODE = 0
           }
           if ($draft -and $draft.Trim() -eq "false") {
             throw "Release for tag '$tag' is already published; refusing to overwrite it"
