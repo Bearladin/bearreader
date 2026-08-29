@@ -46,3 +46,11 @@ jobs:
           cd ..
           python scripts/sync_localized_frontend.py --compare
           python scripts/sync_localized_frontend.py --validate-only
+
+      - name: Upload built dist for diagnosis
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-built-dist-${{ github.sha }}
+          path: frontend/dist/
+          retention-days: 7
