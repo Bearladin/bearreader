@@ -190,5 +190,8 @@ force-sort-within-sections = true
 known-first-party = ["lncrawl"]
 
 [tool.pyright]
+# BearReader ships as a Windows desktop app; pin the analysis platform so
+# Windows-only APIs like ctypes.windll type-check on any CI host.
+pythonPlatform = "Windows"
 # Completely suppress all errors from these paths
 ignore = ["scripts/**"]

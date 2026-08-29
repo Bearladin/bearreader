@@ -25,7 +25,10 @@ permissions:
 
 jobs:
   validate-embedded-web:
-    runs-on: ubuntu-latest
+    # The embedded output is built on Windows locally and in release.yml; the
+    # workbox-generated sw.js is platform-sensitive, so the rebuild-and-compare
+    # gate must run on the same platform to be meaningful.
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
@@ -34,18 +37,29 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
       - name: Rebuild frontend and compare against the embedded copy
-        shell: bash
+        shell: pwsh
         run: |
-          set -euo pipefail
-          cd frontend
-          yarn install --frozen-lockfile
-          yarn audit:zh
-          yarn lint
-          yarn build
-          cd ..
-          python scripts/sync_localized_frontend.py --compare
-          python scripts/sync_localized_frontend.py --validate-only
+          function Invoke-Native {
+            param(
+              [Parameter(Mandatory = $true, Position = 0)][string] $FilePath,
+              [Parameter(Position = 1, ValueFromRemainingArguments = $true)][string[]] $ArgumentList
+            )
+            $output = & $FilePath @ArgumentList
+            if ($LASTEXITCODE -ne 0) {
+              throw "Native command failed ($LASTEXITCODE): $FilePath $($ArgumentList -join ' ')"
+            }
+            $output
+          }
+          Push-Location frontend
+          Invoke-Native yarn install --frozen-lockfile
+          Invoke-Native yarn audit:zh
+          Invoke-Native yarn lint
+          Invoke-Native yarn build
+          Pop-Location
+          Invoke-Native python scripts\sync_localized_frontend.py --compare
+          Invoke-Native python scripts\sync_localized_frontend.py --validate-only
 
       - name: Upload built dist for diagnosis
         if: failure()
