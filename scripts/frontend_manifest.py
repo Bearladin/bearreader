@@ -136,6 +136,15 @@ def verify_manifest(
                 f"{key}: manifest records {recorded.get(key)!r}, "
                 f"current tree computes {actual[key]!r}"
             )
+    # 工具版本漂移会让同源码产出不同字节（如 workbox 的 sw.js 随 Node 运行时变化），
+    # 所以构建工具链版本本身也是 provenance 的一部分。
+    if recorded.get("node_version", "unknown") != "unknown" and (
+        recorded.get("node_version") != actual["node_version"]
+    ):
+        mismatches.append(
+            f"node_version: manifest records {recorded.get('node_version')!r}, "
+            f"current environment is {actual['node_version']!r}"
+        )
     return mismatches
 
 
