@@ -29,7 +29,7 @@ geckodriver.log
 Lightnovels/
 mycreds.txt
 node_modules
-package.json
+/package.json
 save_pid.txt
 Test Novel
 windows/
