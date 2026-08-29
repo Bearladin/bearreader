@@ -1,0 +1,37 @@
+.chapterItem {
+  padding: 0 !important;
+}
+
+.chapterLink {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: start;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 2px;
+  text-decoration: none;
+}
+
+.chapterLink:hover {
+  background: rgba(128, 128, 128, 0.14);
+}
+
+.chapterLink:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+
+.chapterSerial {
+  color: currentColor;
+  opacity: 0.58;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.chapterTitle {
+  min-width: 0;
+  line-height: 1.5;
+  text-align: left;
+  overflow-wrap: anywhere;
+}

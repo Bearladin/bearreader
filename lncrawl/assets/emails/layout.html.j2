@@ -1,0 +1,30 @@
+<body style="
+    margin: 0;
+    padding: 0;
+    background-color: #f2fafc;
+">
+    <table width="100%" border="0" cellspacing="0" cellpadding="0" style="
+        margin: 0;
+        padding: 2rem;
+        font-family: sans-serif;
+        background-color: #f2fafc;
+    ">
+        <tr>
+            <td align="center">
+                {% block content %}{% endblock %}
+            </td>
+        </tr>
+        <tr>
+            <td align="center" style="
+                user-select: none;
+                padding: 1rem;
+                color: #888;
+                text-align: center;
+                font-size: 0.75rem;
+                font-family: sans-serif;
+            ">
+                This is an automated message. Please do not reply.
+            </td>
+        </tr>
+    </table>
+</body>

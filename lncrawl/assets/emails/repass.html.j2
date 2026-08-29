@@ -1,0 +1,46 @@
+{% extends "layout.html.j2" %}
+
+{% block content %}
+<div style="
+    max-width: 425px;
+    overflow: hidden;
+    background: #fff;
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    padding: 2rem;
+    text-align: center;
+    letter-spacing: 0.02rem;
+    text-align: center;
+">
+    <div class="title" style="
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #222;
+        margin-bottom: 1.5rem;
+    ">
+        Reset Your Password
+    </div>
+    <div class="subtitle" style="color: #666">
+        We have received a request to reset your password. Click the button below to proceed.
+    </div>
+    <a href="{{ link }}" target="_blank" style="
+        display: block;
+        margin-top: 1rem;
+        margin-bottom: 0.5rem;
+        padding: 1rem 2rem;
+        border-radius: 8px;
+        background: #2563eb;
+        color: #fff;
+        font-weight: 600;
+        text-decoration: none;
+    ">
+        Reset Password
+    </a>
+    <div style="
+        color: #888;
+        font-size: 0.825rem;
+    ">
+        This link will expire in <strong>5 minutes</strong>.
+    </div>
+</div>
+{% endblock %}

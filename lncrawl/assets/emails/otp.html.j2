@@ -1,0 +1,38 @@
+{% extends "layout.html.j2" %}
+
+{% block content %}
+<div style="
+    max-width: 350px;
+    overflow: hidden;
+    background: #fff;
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    padding: 2rem 3rem;
+    text-align: center;
+">
+    <div style="font-size: 1.1rem">
+        Your email verification code is
+    </div>
+    <div style="
+        color: #276ef1;
+        font-family: monospace;
+        font-size: 2.5rem;
+        font-weight: 700;
+        letter-spacing: 0.5rem;
+        margin-top: 1rem;
+        margin-bottom: 0.5rem;
+        padding: 1rem 2rem;
+        border-radius: 1rem;
+        background: #f0f4ff;
+        box-shadow: 0 2px 8px rgba(39, 110, 241, 0.06);
+    ">
+        {{otp}}
+    </div>
+    <div style="
+        font-size: 0.875rem;
+        color: #888;
+    ">
+        This code will expire in 5 minutes.
+    </div>
+</div>
+{% endblock %}

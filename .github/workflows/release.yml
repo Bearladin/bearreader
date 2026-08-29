@@ -1,0 +1,213 @@
+name: Build BearReader Windows release
+run-name: "BearReader release ${{ github.ref_name }}"
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  release-windows:
+    runs-on: windows-latest
+    env:
+      PYTHONIOENCODING: utf-8
+      UV_PYTHON: "3.11"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.11"
+          enable-cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install build and validation dependencies
+        shell: pwsh
+        run: |
+          function Invoke-Native {
+            param(
+              [Parameter(Mandatory = $true, Position = 0)][string] $FilePath,
+              [Parameter(Position = 1, ValueFromRemainingArguments = $true)][string[]] $ArgumentList
+            )
+            $output = & $FilePath @ArgumentList
+            if ($LASTEXITCODE -ne 0) {
+              throw "Native command failed ($LASTEXITCODE): $FilePath $($ArgumentList -join ' ')"
+            }
+            $output
+          }
+          Invoke-Native uv sync --frozen --all-extras --all-groups
+
+      - name: Build frontend from the same commit and verify the embedded copy
+        shell: pwsh
+        run: |
+          function Invoke-Native {
+            param(
+              [Parameter(Mandatory = $true, Position = 0)][string] $FilePath,
+              [Parameter(Position = 1, ValueFromRemainingArguments = $true)][string[]] $ArgumentList
+            )
+            $output = & $FilePath @ArgumentList
+            if ($LASTEXITCODE -ne 0) {
+              throw "Native command failed ($LASTEXITCODE): $FilePath $($ArgumentList -join ' ')"
+            }
+            $output
+          }
+          Push-Location frontend
+          Invoke-Native yarn install --frozen-lockfile
+          Invoke-Native yarn audit:zh
+          Invoke-Native yarn lint
+          Invoke-Native yarn build
+          Pop-Location
+          Invoke-Native uv run python scripts\sync_localized_frontend.py --compare
+          Invoke-Native uv run python scripts\sync_localized_frontend.py --validate-only
+
+      - name: Run distribution gates
+        shell: pwsh
+        run: |
+          function Invoke-Native {
+            param(
+              [Parameter(Mandatory = $true, Position = 0)][string] $FilePath,
+              [Parameter(Position = 1, ValueFromRemainingArguments = $true)][string[]] $ArgumentList
+            )
+            $output = & $FilePath @ArgumentList
+            if ($LASTEXITCODE -ne 0) {
+              throw "Native command failed ($LASTEXITCODE): $FilePath $($ArgumentList -join ' ')"
+            }
+            $output
+          }
+          $env:XIAOXIONG_NOVEL_DATA_PATH = Join-Path $PWD "build\ci-data\XiaoXiongNovel"
+          Invoke-Native uv run pyright lncrawl
+          Invoke-Native uv run ruff format --diff --check
+          Invoke-Native uv run ruff check
+          Invoke-Native uv run python -m lncrawl dev check-sources
+          Invoke-Native uv run python scripts\verify_distribution_identity.py
+          Invoke-Native uv run python scripts\build_distribution_sources.py --output build\distribution-sources
+          Invoke-Native uv run python scripts\verify_distribution_sources.py build\distribution-sources
+          Invoke-Native uv run python scripts\verify_distribution_runtime.py
+          Invoke-Native uv run python scripts\verify_distribution_hardening.py
+          Invoke-Native uv run python scripts\verify_workflow_safety.py
+
+      - name: Build and verify Windows bundle
+        shell: pwsh
+        run: |
+          function Invoke-Native {
+            param(
+              [Parameter(Mandatory = $true, Position = 0)][string] $FilePath,
+              [Parameter(Position = 1, ValueFromRemainingArguments = $true)][string[]] $ArgumentList
+            )
+            $output = & $FilePath @ArgumentList
+            if ($LASTEXITCODE -ne 0) {
+              throw "Native command failed ($LASTEXITCODE): $FilePath $($ArgumentList -join ' ')"
+            }
+            $output
+          }
+          Invoke-Native uv run python setup_pyi.py
+          Invoke-Native uv run python scripts\verify_windows_bundle.py "dist\BearReader"
+          Invoke-Native ".\dist\BearReader\backendtool.exe" -ll sources list
+          Invoke-Native uv run python scripts\build_portable.py
+
+      - name: Archive GPL source material and release metadata
+        shell: pwsh
+        run: |
+          function Invoke-Native {
+            param(
+              [Parameter(Mandatory = $true, Position = 0)][string] $FilePath,
+              [Parameter(Position = 1, ValueFromRemainingArguments = $true)][string[]] $ArgumentList
+            )
+            $output = & $FilePath @ArgumentList
+            if ($LASTEXITCODE -ne 0) {
+              throw "Native command failed ($LASTEXITCODE): $FilePath $($ArgumentList -join ' ')"
+            }
+            $output
+          }
+          $backendStatus = Invoke-Native git status --porcelain
+          if ($backendStatus) {
+            throw "Backend checkout is dirty; refusing to create a source archive"
+          }
+          $version = (Get-Content lncrawl\VERSION -Raw).Trim()
+          $tag = $env:GITHUB_REF_NAME
+          Invoke-Native git archive `
+            --format=zip `
+            --output "dist\BearReader-source-$version.zip" `
+            HEAD
+          Copy-Item LICENSE dist\LICENSE-GPL-3.0.txt
+          Copy-Item THIRD_PARTY_NOTICES.md dist\THIRD_PARTY_NOTICES.md
+          @(
+            "tag=$tag"
+            "version=$version"
+          ) | Set-Content dist\SOURCE_REVISIONS.txt -Encoding UTF8
+          Get-ChildItem dist -File |
+            Get-FileHash -Algorithm SHA256 |
+            ForEach-Object {
+              "$($_.Hash.ToLowerInvariant()) *$($_.Name)"
+            } |
+            Set-Content dist\SHA256SUMS.txt -Encoding ASCII
+
+      - name: Upload Windows release bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: BearReader-windows-${{ github.ref_name }}
+          path: |
+            dist/BearReader-portable-*.zip
+            dist/BearReader-source-*.zip
+            dist/LICENSE-GPL-3.0.txt
+            dist/THIRD_PARTY_NOTICES.md
+            dist/SOURCE_REVISIONS.txt
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+
+      - name: Guard against overwriting a published release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          function Invoke-Native {
+            param(
+              [Parameter(Mandatory = $true, Position = 0)][string] $FilePath,
+              [Parameter(Position = 1, ValueFromRemainingArguments = $true)][string[]] $ArgumentList
+            )
+            $output = & $FilePath @ArgumentList
+            if ($LASTEXITCODE -ne 0) {
+              throw "Native command failed ($LASTEXITCODE): $FilePath $($ArgumentList -join ' ')"
+            }
+            $output
+          }
+          $repo = $env:GITHUB_REPOSITORY
+          $tag = $env:GITHUB_REF_NAME
+          $draft = $null
+          try {
+            $draft = Invoke-Native gh api "repos/$repo/releases/tags/$tag" --jq '.draft'
+          } catch {
+            # gh exits 1 with "Not Found" when the tag has no release yet, which is allowed.
+            if ($_.Exception.Message -notlike "*Native command failed (1)*") {
+              throw
+            }
+          }
+          if ($draft -and $draft.Trim() -eq "false") {
+            throw "Release for tag '$tag' is already published; refusing to overwrite it"
+          }
+
+      - name: Create draft Windows-only release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: false
+          body: |
+            BearReader Windows 绿色版发行包。所有产物均由标签 ${{ github.ref_name }} 的单次检出构建；
+            前端源码与嵌入产物一致性由 frontend-manifest.json 校验。请先完成手工验收，再发布此草稿。
+          files: |
+            dist/BearReader-portable-*.zip
+            dist/BearReader-source-*.zip
+            dist/LICENSE-GPL-3.0.txt
+            dist/THIRD_PARTY_NOTICES.md
+            dist/SOURCE_REVISIONS.txt
+            dist/SHA256SUMS.txt

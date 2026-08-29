@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": ["WebSearch", "WebFetch(domain:github.com)"]
+  },
+  "skillOverrides": {
+    "frontend-design:frontend-design": "on",
+    "simplify": "on",
+    "security-review": "on",
+    "review": "on",
+    "fewer-permission-prompts": "on",
+    "claude-md-management:revise-claude-md": "on",
+    "claude-api": "user-invocable-only",
+    "schedule": "user-invocable-only",
+    "loop": "user-invocable-only",
+    "skill-creator:skill-creator": "user-invocable-only",
+    "keybindings-help": "user-invocable-only"
+  }
+}

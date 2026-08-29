@@ -1,0 +1,87 @@
+{% extends "layout.html.j2" %}
+
+{% block content %}
+<div style="
+    max-width: 450px;
+    overflow: hidden;
+    background: #fff;
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    gap: 0.6rem;
+    letter-spacing: 0.02rem;
+    text-align: center;
+">
+    <div style="
+        font-size: 1.1rem;
+        font-weight: 600;
+        padding: 1rem 2rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.18);
+        border-bottom: 1px solid rgba(0,0,0,0.12);
+    ">
+        {% if is_running %}
+        <span style="color: #276ef1;">&#9889; Running</span>
+        {% elif is_success %}
+        <span style="color: #28a745;">&#9989; Success</span>
+        {% elif is_failed %}
+        <span style="color: #b76e00;">&#10062; Failed</span>
+        {% elif is_canceled %}
+        <span style="color: #d9534f;">&#9888;&#65039; Canceled</span>
+        {% endif %}
+    </div>
+
+    <div style="padding: 2rem 3rem">
+        <div style="font-size: 1.1rem; color: #666;">
+            {{ job_type }}
+        </div>
+
+        <div style="
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #222;
+            margin: 1rem 0;
+        ">
+            {{ job_title }}
+        </div>
+
+
+        {% if is_failed or is_canceled %}
+        <hr style="width: 100%; opacity: 0.3; margin: 1rem 0" />
+        <div style="
+            align-self: normal;
+            display: block;
+            padding: 0.8rem 1.2rem;
+            background: #fcefe7;
+            border-radius: 0.5rem;
+            box-shadow: inset 0 0 5px rgb(0, 0, 0, 0.05);
+            color: #966;
+            white-space: pre-wrap;
+            font-size: 0.825rem;
+            font-family: monospace;
+        ">
+            {{ failure or 'No cause available' }}
+        </div>
+        {% endif %}
+
+        <hr style="width: 100%; opacity: 0.3; margin: 20px 0" />
+
+        <table width="100%">
+            <tr>
+                <td align="center">
+                    <a href="{{ job_url }}" target="_blank" style="
+                        display: block;
+                        padding: 1rem 2rem;
+                        border-radius: 8px;
+                        background: #276ef1;
+                        align-self: center;
+                        color: #fff;
+                        font-weight: 500;
+                        text-decoration: none;
+                    ">
+                        View Job Details
+                    </a>
+                </td>
+            </tr>
+        </table>
+    </div>
+</div>
+{% endblock %}

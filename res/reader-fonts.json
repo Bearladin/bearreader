@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "character_set": "Python 3.11 GBK printable repertoire",
+  "fonts": [
+    {
+      "key": "kai",
+      "upstream_name": "LXGW WenKai GB Screen",
+      "upstream_version": "1.522",
+      "source_url": "https://github.com/lxgw/LxgwWenKai-Screen/releases/download/v1.522/LXGWWenKaiGBScreen.ttf",
+      "source_sha256": "23ec023913e1851925eb94462c4b0ccd1d78bb89533745aaa8cc682ccd339dc0",
+      "family_name": "XiaoXiong Reader Kai",
+      "postscript_name": "XiaoXiongReaderKai-Regular",
+      "output_name": "XiaoXiongReaderKai-Regular.woff2",
+      "output_sha256": "5b46161920df959c9f860ddfdf8274f9ca94e725867c9a16af04b3418f6cd0bb",
+      "output_bytes": 6075056,
+      "requested_codepoints": 21886,
+      "included_codepoints": 21886,
+      "missing_non_han_codepoints": [],
+      "license_file": "LICENSE-XIAOXIONG-READER-KAI-OFL.txt"
+    },
+    {
+      "key": "serif",
+      "upstream_name": "Noto Serif CJK SC",
+      "upstream_version": "2.003",
+      "source_url": "https://raw.githubusercontent.com/notofonts/noto-cjk/Serif2.003/Serif/OTF/SimplifiedChinese/NotoSerifCJKsc-Regular.otf",
+      "source_sha256": "2a2eae2628df83556c54018c41e20fa532c1b862c5256ae8b3f23feb918d12ca",
+      "family_name": "XiaoXiong Reader Serif",
+      "postscript_name": "XiaoXiongReaderSerif-Regular",
+      "output_name": "XiaoXiongReaderSerif-Regular.woff2",
+      "output_sha256": "1afbfd2b03e9cebf761ec00166cf763f912d9b42f9d0a66dbd66e4d4c0985c8d",
+      "output_bytes": 11390852,
+      "requested_codepoints": 21886,
+      "included_codepoints": 21885,
+      "missing_non_han_codepoints": [
+        "U+2252"
+      ],
+      "license_file": "LICENSE-XIAOXIONG-READER-SERIF-OFL.txt"
+    }
+  ]
+}

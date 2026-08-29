@@ -1,0 +1,79 @@
+import {
+  FeedbackStatus,
+  FeedbackType,
+  JobStatus,
+  JobType,
+  UserRole,
+} from '@/types/enums';
+
+export const copy = {
+  common: {
+    loading: '正在加载…',
+    retry: '重试',
+    cancel: '取消',
+    confirm: '确认',
+    save: '保存',
+    delete: '删除',
+    search: '搜索',
+    noData: '暂无数据',
+  },
+  navigation: {
+    home: '首页',
+    novels: '小说',
+    libraries: '书架',
+    jobs: '任务',
+    sources: '书源',
+    settings: '设置',
+  },
+} as const;
+
+export const enumLabels = {
+  jobStatus: {
+    [JobStatus.PENDING]: '待处理',
+    [JobStatus.RUNNING]: '运行中',
+    [JobStatus.SUCCESS]: '成功',
+    [JobStatus.FAILED]: '失败',
+    [JobStatus.CANCELED]: '已取消',
+    [JobStatus.PAUSED]: '已暂停',
+  } satisfies Record<JobStatus, string>,
+  jobType: {
+    [JobType.NOVEL]: '小说',
+    [JobType.NOVEL_BATCH]: '批量小说',
+    [JobType.FULL_NOVEL]: '完整小说',
+    [JobType.FULL_NOVEL_BATCH]: '批量完整小说',
+    [JobType.CHAPTER]: '章节',
+    [JobType.CHAPTER_BATCH]: '批量章节',
+    [JobType.VOLUME]: '分卷',
+    [JobType.VOLUME_BATCH]: '批量分卷',
+    [JobType.IMAGE]: '图片',
+    [JobType.IMAGE_BATCH]: '批量图片',
+    [JobType.ARTIFACT]: '导出文件',
+    [JobType.ARTIFACT_BATCH]: '批量导出文件',
+    [JobType.SEARCH_SOURCE]: '书源搜索',
+    [JobType.SEARCH_ALL_SOURCES]: '全源搜索',
+    [JobType.FETCH_MISSING]: '补全缺失章节',
+    [JobType.FETCH_LATEST]: '检查更新并补全',
+    [JobType.NOVEL_TRANSLATION]: '翻译小说',
+    [JobType.NOVEL_TRANSLATION_BATCH]: '批量翻译小说',
+    [JobType.FULL_NOVEL_TRANSLATION]: '翻译完整小说',
+    [JobType.FULL_NOVEL_TRANSLATION_BATCH]: '批量翻译完整小说',
+    [JobType.CHAPTER_TRANSLATION]: '翻译章节',
+    [JobType.CHAPTER_TRANSLATION_BATCH]: '批量翻译章节',
+    [JobType.VOLUME_TRANSLATION]: '翻译分卷',
+    [JobType.VOLUME_TRANSLATION_BATCH]: '批量翻译分卷',
+  } satisfies Record<JobType, string>,
+  userRole: {
+    [UserRole.USER]: '普通用户',
+    [UserRole.ADMIN]: '管理员',
+  } satisfies Record<UserRole, string>,
+  feedbackStatus: {
+    [FeedbackStatus.PENDING]: '待处理',
+    [FeedbackStatus.ACCEPTED]: '处理中',
+    [FeedbackStatus.RESOLVED]: '已解决',
+  } satisfies Record<FeedbackStatus, string>,
+  feedbackType: {
+    [FeedbackType.GENERAL]: '通用反馈',
+    [FeedbackType.ISSUE]: '问题反馈',
+    [FeedbackType.FEATURE]: '功能建议',
+  } satisfies Record<FeedbackType, string>,
+} as const;

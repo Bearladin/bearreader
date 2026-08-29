@@ -1,0 +1,56 @@
+.novel-reader {
+  min-height: 100vh;
+  font-weight: 400;
+  position: relative;
+  text-rendering: optimizeLegibility;
+
+  &.mobile {
+    padding: 15px;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: inherit;
+    font-weight: 500;
+    line-height: 1.2em;
+  }
+
+  h1 {
+    font-size: 1.5em;
+  }
+
+  h2 {
+    font-size: 1.35em;
+  }
+
+  h3 {
+    font-size: 1.2em;
+  }
+
+  h4 {
+    font-size: 1.1em;
+  }
+
+  p {
+    white-space: normal;
+    font-size: 1em;
+    margin: 0 0 1.25em;
+  }
+
+  p:empty,
+  p + br,
+  br + br,
+  p > br {
+    display: none;
+  }
+
+  img {
+    width: 100%;
+    object-fit: contain;
+    object-position: center;
+  }
+}

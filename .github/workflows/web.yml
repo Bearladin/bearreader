@@ -1,0 +1,48 @@
+name: Validate embedded web build
+
+on:
+  push:
+    paths:
+      - "frontend/**"
+      - "lncrawl/server/web/**"
+      - "frontend-manifest.json"
+      - "scripts/sync_localized_frontend.py"
+      - "scripts/frontend_manifest.py"
+      - ".github/workflows/web.yml"
+  pull_request:
+    paths:
+      - "frontend/**"
+      - "lncrawl/server/web/**"
+      - "frontend-manifest.json"
+      - "scripts/sync_localized_frontend.py"
+      - "scripts/frontend_manifest.py"
+      - ".github/workflows/web.yml"
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-embedded-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Rebuild frontend and compare against the embedded copy
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd frontend
+          yarn install --frozen-lockfile
+          yarn audit:zh
+          yarn lint
+          yarn build
+          cd ..
+          python scripts/sync_localized_frontend.py --compare
+          python scripts/sync_localized_frontend.py --validate-only

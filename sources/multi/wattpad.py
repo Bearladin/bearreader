@@ -1,0 +1,84 @@
+# -*- coding: utf-8 -*-
+import logging
+import re
+from time import time
+from urllib.parse import urlparse
+
+from lncrawl.core import Chapter, LegacyCrawler
+from lncrawl.exceptions import LNException
+
+logger = logging.getLogger(__name__)
+
+
+class WattpadCrawler(LegacyCrawler):
+    base_url = [
+        "https://www.wattpad.com/",
+        "https://my.w.tt/",
+    ]
+
+    def initialize(self):
+        self.scraper.origin = "https://www.wattpad.com/"
+
+    def login(self, username_or_email: str, password_or_token: str) -> None:
+        resp = self.submit_form(
+            f"{self.scraper.origin}login?nextUrl=/home",
+            data={
+                "username": username_or_email,
+                "password": password_or_token,
+            },
+        )
+        apiAuthKey = re.findall(r"wattpad\.apiAuthKey = '([^']+)';", resp.text)
+        if not apiAuthKey:
+            raise LNException("Failed to login")
+        logger.info("authorization", apiAuthKey[0])
+        self.set_header("authorization", apiAuthKey[0])
+
+        data = self.get_json(
+            f"{self.scraper.origin}api/v3/internal/current_user?fields=email,username,name",
+        )
+        logger.debug("current user", data)
+        if username_or_email.lower() != data["username"].lower():
+            raise LNException("Failed to login")
+        logger.info(f"Logged in as {data['name']}[{data['username']}]<{data['email']}>")
+
+    def read_novel_info(self):
+        search_id = re.compile(r"(\d+)")
+        id_no = search_id.search(self.novel_url)
+        if not id_no:
+            raise LNException("No story ID found")
+        response = self.get_response(f"{self.scraper.origin}api/v3/stories/{id_no.group()}")
+        story_info = response.json()
+
+        self.novel_title = story_info["title"]
+        logger.info("Novel title: %s", self.novel_title)
+
+        self.novel_cover = self.absolute_url(story_info["cover"])
+        logger.info("Novel cover: %s", self.novel_cover)
+
+        self.novel_author = story_info["user"]["name"]
+        logger.info("Novel author: %s", self.novel_author)
+
+        for a in story_info["parts"]:
+            self.chapters.append(
+                Chapter(
+                    id=len(self.chapters) + 1,
+                    url=self.absolute_url(a["url"]),
+                    title=a["title"],
+                )
+            )
+
+    def download_chapter_body(self, chapter):
+        chapter_id = urlparse(chapter["url"]).path.split("-")[0].strip("/")
+        info_url = f"{self.scraper.origin}v4/parts/{chapter_id}?fields=id,title,pages,text_url&_={int(time() * 1000)}"
+
+        logger.info("Getting info %s", info_url)
+        response = self.get_response(info_url)
+        data = response.json()
+        chapter["title"] = data["title"]
+        text_url = data["text_url"]["text"]
+
+        logger.info("Getting text %s", text_url)
+        response = self.get_response(text_url)
+        text = response.content.decode("utf8")
+        text = re.sub(r'data-p-id="[a-f0-9]+"', "", text)
+        return text

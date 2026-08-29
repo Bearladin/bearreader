@@ -1,0 +1,359 @@
+from contextlib import contextmanager
+from difflib import SequenceMatcher
+import gc
+import logging
+from threading import Event
+from typing import List, Optional, Union
+
+from pydantic import HttpUrl
+from scraper import extract_host
+
+from ..context import ctx
+from ..core import Chapter as CrawlerChapter, Crawler, Novel as CrawlerNovel, SearchResult
+from ..core.tiers import describe, is_stale, stamp
+from ..dao import Chapter, ChapterImage, Novel
+from ..enums import LanguageCode
+from ..exceptions import ServerErrors
+from .chapters import EMPTY_ATTEMPTS_KEY
+
+logger = logging.getLogger(__name__)
+
+# How often a chapter that came back empty is fetched again before it is left alone
+MAX_EMPTY_ATTEMPTS = 3
+
+
+def _normalize_language(lang: Optional[str]) -> Optional[str]:
+    """A known base language code or None. Source-derived values include
+    'multi' and regional variants (zh-cn) that must not reach the CHAR(2)
+    Novel.language column."""
+    if not lang:
+        return None
+    base = lang.strip().lower().split("-")[0]
+    try:
+        return LanguageCode(base).value
+    except ValueError:
+        return None
+
+
+def _origin_of(crawler: Crawler) -> str:
+    return describe(getattr(crawler, "tier", None), getattr(crawler, "__file__", ""))
+
+
+class CrawlerService:
+    def __init__(self) -> None:
+        pass
+
+    @contextmanager
+    def prepare_crawler(
+        self,
+        user_id: str,
+        url: str,
+        signal: Optional[Event] = None,
+        custom_crawler: Optional[Crawler] = None,
+    ):
+        crawler = custom_crawler
+        if crawler is None:
+            crawler = ctx.sources.init_crawler(url)
+
+        crawler.novel_url = url
+        prev_signal = crawler.scraper.signal
+        if signal:
+            crawler.scraper.signal = signal
+
+        try:
+            # login
+            can_login = getattr(crawler, "can_login", False)
+            logged_in = getattr(crawler, "__logged_in__", False)
+            if can_login and not logged_in:
+                login = ctx.secrets.get_login(user_id, url)
+                if login:
+                    crawler.login(login.username, login.password)
+                    setattr(crawler, "__logged_in__", True)
+
+            yield crawler
+
+        finally:
+            crawler.scraper.signal = prev_signal
+            if custom_crawler is None:
+                crawler.close()
+                del crawler
+            gc.collect()
+
+    def fetch_novel(
+        self,
+        user_id: str,
+        url: Union[str, HttpUrl],
+        signal: Optional[Event] = None,
+        custom: Optional[Crawler] = None,
+    ) -> Novel:
+        # validate url
+        if isinstance(url, str):
+            url = HttpUrl(url)
+        if not url.host:
+            raise ServerErrors.invalid_url.with_extra(url)
+        novel_url = str(url)
+
+        with self.prepare_crawler(user_id, novel_url, signal, custom) as crawler:
+            logger.info(f"Using {_origin_of(crawler)} to crawl {novel_url}")
+
+            # fetch novel metadata
+            model = CrawlerNovel(url=novel_url)
+            crawler.read_novel(model)
+            if not model.title:
+                raise ServerErrors.no_novel_title
+            crawler.format_novel(model)
+            assert model.volumes is not None
+            assert model.chapters is not None
+
+            # get or create novel object
+            novel = ctx.novels.find_by_url(novel_url)
+            if not novel:
+                with ctx.db.session() as sess:
+                    novel = Novel(
+                        url=novel_url,
+                        title=model.title,
+                        cover_url=model.cover_url,
+                        domain=extract_host(novel_url),
+                    )
+                    sess.add(novel)
+                    sess.commit()
+
+            # update novel info
+            novel.title = model.title
+            novel.authors = model.author
+            novel.cover_url = model.cover_url
+            novel.domain = extract_host(novel_url)
+            novel.manga = model.is_manga or crawler.has_manga
+            novel.mtl = model.is_mtl or crawler.has_mtl
+            novel.synopsis = model.synopsis
+            novel.tags = model.tags or []
+            novel.rtl = model.is_rtl or False
+            novel.volume_count = len(model.volumes)
+            novel.chapter_count = len(model.chapters)
+
+            # detect novel language
+            sample = f"{model.title}\n{model.synopsis or ''}".strip()
+            language = ctx.translator.detect_language(sample)
+            if not language:
+                language = model.language or crawler.language
+            novel.language = _normalize_language(language)
+
+            # update novel extra
+            extra = dict(**novel.extra)
+            extra.update(model.get_extras())
+            novel.extra = stamp(extra, crawler.version, crawler.tier)
+
+            # save updates
+            with ctx.db.session() as sess:
+                sess.merge(novel)
+                sess.commit()
+
+            # keep the recommendation title index in sync
+            ctx.recommendations.index_add(novel.id, novel.title)
+
+            # add or update tags (vocabulary + normalized associations)
+            ctx.tags.set_novel_tags(novel.id, novel.tags)
+
+            # add or update volumes
+            ctx.volumes.sync(novel.id, model.volumes)
+
+            # add or update chapters
+            ctx.chapters.sync(novel.id, model.chapters)
+
+            # download cover
+            crawler.download_cover(
+                novel.cover_url or "",
+                ctx.files.resolve(novel.cover_file),
+            )
+
+            # update output path time (prevents cleaner to delete it)
+            ctx.files.utime(f"novels/{novel.id}")
+
+        logger.debug(
+            f"Fetched novel: {novel.title} - {novel.chapter_count} chapters | {novel.volume_count} volumes | {novel.url}"
+        )
+        return novel
+
+    def fetch_chapter(
+        self,
+        user_id: str,
+        chapter_id: str,
+        signal: Optional[Event] = None,
+        custom: Optional[Crawler] = None,
+        refresh: bool = False,
+    ) -> Chapter:
+        chapter = ctx.chapters.get(chapter_id)
+        novel = ctx.novels.get(chapter.novel_id)
+        try:
+            url = HttpUrl(chapter.url)
+        except Exception:
+            raise ServerErrors.invalid_url
+        if not url.host:
+            raise ServerErrors.invalid_url
+
+        with self.prepare_crawler(user_id, novel.url, signal, custom) as crawler:
+            # check if download is necessary. Staleness needs positive evidence: the same
+            # tier, both versions known, and different. A host that moved tiers, or content
+            # stamped before this existed, is left alone rather than re-downloaded.
+            if (
+                not refresh
+                and chapter.is_available
+                and not is_stale(chapter.extra, crawler.version, crawler.tier)
+            ):
+                logger.debug(f"Skipped: {novel.title}] - Chapter {chapter.serial}")
+                return chapter
+
+            # get chapter content
+            model = CrawlerChapter(
+                url=str(url),
+                id=chapter.serial,
+                title=chapter.title,
+            )
+            model.update(chapter.extra)
+            crawler.download_chapter(model)
+            crawler.format_chapter(model)
+
+            body = model.body or ""
+            if not model.success or not body:
+                return self._chapter_came_back_empty(chapter, novel, crawler)
+
+            # save chapter content
+            ctx.files.save_text(chapter.content_file, body)
+
+            # detect language from chapter (strong signal)
+            language = ctx.translator.detect_language(body)
+            language = _normalize_language(language)
+            if language and novel.language != language:
+                novel.language = language
+                with ctx.db.session() as sess:
+                    sess.merge(novel)
+                    sess.commit()
+
+            # save chapter images
+            ctx.images.sync(chapter, model.images)
+
+            # set extras
+            extra = dict(**chapter.extra)
+            extra.update(model.get_extras())
+            chapter.extra = stamp(extra, crawler.version, crawler.tier)
+
+            # update title and status
+            chapter.is_done = True
+            chapter.title = model.title
+
+            # update db
+            with ctx.db.session() as sess:
+                sess.merge(chapter)
+                sess.commit()
+
+            logger.debug(f"Downloaded chapter: {novel.title}] - Chapter {chapter.serial}")
+            return chapter
+
+    def _chapter_came_back_empty(
+        self,
+        chapter: Chapter,
+        novel: Novel,
+        crawler: Crawler,
+    ) -> Chapter:
+        attempts = int(chapter.extra.get(EMPTY_ATTEMPTS_KEY) or 0) + 1
+        ctx.health.record(
+            extract_host(novel.url),
+            "empty_body",
+            f"chapter {chapter.serial} ({chapter.url})",
+        )
+
+        extra = dict(**chapter.extra)
+        extra[EMPTY_ATTEMPTS_KEY] = attempts
+        chapter.extra = stamp(extra, crawler.version, crawler.tier)
+        chapter.is_done = attempts >= MAX_EMPTY_ATTEMPTS
+
+        with ctx.db.session() as sess:
+            sess.merge(chapter)
+            sess.commit()
+
+        logger.warning(
+            "Empty chapter body: %s - Chapter %s (attempt %d of %d)",
+            novel.title,
+            chapter.serial,
+            attempts,
+            MAX_EMPTY_ATTEMPTS,
+        )
+        return chapter
+
+    def fetch_image(
+        self,
+        user_id: str,
+        image_id: str,
+        signal: Optional[Event] = None,
+        custom: Optional[Crawler] = None,
+        refresh: bool = False,
+    ) -> ChapterImage:
+        image = ctx.images.get(image_id)
+        novel = ctx.novels.get(image.novel_id)
+        try:
+            url = HttpUrl(image.url)
+        except Exception:
+            raise ServerErrors.invalid_url
+        if not url.host:
+            raise ServerErrors.invalid_url
+
+        with self.prepare_crawler(user_id, novel.url, signal, custom) as crawler:
+            # check if download is necessary
+            if (
+                not refresh
+                and image.is_available
+                and not is_stale(image.extra, crawler.version, crawler.tier)
+            ):
+                logger.debug(f"Skipped: {novel.title}] - Image {image.id}")
+                return image
+
+            # download image
+            file = ctx.files.resolve(image.image_file)
+            crawler.download_image(str(url), file)
+
+            image.is_done = file.is_file()
+            image.extra = stamp(dict(**image.extra), crawler.version, crawler.tier)
+
+            # update db
+            with ctx.db.session() as sess:
+                sess.merge(image)
+                sess.commit()
+
+            logger.debug(f"Downloaded image: {novel.title}] - Image {image.id}")
+            return image
+
+    def search_novel(
+        self,
+        user_id: str,
+        query: str,
+        domain: str,
+        signal: Optional[Event] = None,
+        custom: Optional[Crawler] = None,
+    ) -> List[SearchResult]:
+        # get crawler
+        source = ctx.sources.get_source(domain)
+        with self.prepare_crawler(user_id, source.url, signal, custom) as crawler:
+            logger.info(f"Using {_origin_of(crawler)} to search {domain}")
+            query = query.strip()
+
+            # Site searches match loosely (any title containing the query), which
+            # floods the library with unrelated books. Keep exact substrings and
+            # reasonably close titles; rank exact, then prefix/substring matches.
+            def _rank(result: SearchResult) -> tuple[int, float]:
+                ratio = SequenceMatcher(None, result.title, query).ratio()
+                if result.title == query:
+                    bucket = 0
+                elif result.title.startswith(query) or query in result.title:
+                    bucket = 1
+                else:
+                    bucket = 2
+                return (bucket, -ratio)
+
+            results = [
+                result
+                for result in crawler.search(query)
+                if query in result.title
+                or SequenceMatcher(None, result.title, query).ratio() >= 0.6
+            ]
+            results.sort(key=_rank)
+            return results

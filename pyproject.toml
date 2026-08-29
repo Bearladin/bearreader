@@ -1,0 +1,194 @@
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = ["setuptools>=75.3.0", "wheel>=0.40.0"]
+
+[project]
+authors = [{ name = "Bearladin", email = "bearladin@users.noreply.github.com" }]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Natural Language :: Chinese (Simplified)",
+  "Intended Audience :: Developers",
+  "Intended Audience :: End Users/Desktop",
+  "Topic :: Games/Entertainment",
+  "Topic :: Internet :: WWW/HTTP :: Indexing/Search",
+  "Environment :: Console",
+  "Environment :: Web Environment",
+  "Framework :: FastAPI",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+]
+dependencies = [
+  "alembic>=1.14.0",
+  "base58~=2.1.1",
+  "beautifulsoup4>=4.0.0,<5.0.0",
+  "brotli>=1.2.0",
+  "colorama>=0.4.0,<0.5.0",
+  "ebooklib>=0.18.0,<1.0.0",
+  "fastapi[standard]>=0.115.0",
+  "html5lib~=1.1",
+  "httpx[brotli,http2]>=0.27.0",
+  "humanize>=4.0.0",
+  "imap-tools>=1.10.0",
+  "lncrawl-scraper[all]~=1.8.0",
+  "lncrawl-translator>=0.2.1",
+  "lxml>=5.4.0,<7.0.0",
+  "passlib[argon2]>=1.7.0",
+  "pillow>=10.0.0",
+  "psycopg[binary]>=3.2.0",
+  "pycryptodome>=3.0.0,<4.0.0",
+  "pyease-grpc>=1.8.0",
+  "pyparsing>=3.0.0,<4.0.0",
+  "python-box>=7.0.0,<8.0.0",
+  "python-dateutil>=2.9.0,<3.0.0",
+  "python-dotenv>=1.0.0,<2.0.0",
+  "python-jose[cryptography]>=3.4.0",
+  "python-slugify>=8.0.0,<9.0.0",
+  "pyyaml>=6.0.3",
+  "questionary>=2.0.0,<3.0.0",
+  "exejs>=0.0.7",
+  "readability-lxml>=0.8.0,<1.0.0",
+  "regex>=2024.0.0",
+  "sqlmodel>=0.0.22",
+  "tqdm>=4.66.0,<5.0.0",
+  "typer>=0.12.0",
+  "uvicorn>=0.32.0",
+  "zstd>=1.5.7.0",
+  "edge-tts==7.2.8",
+]
+description = "BearReader - 单用户中文 Windows 桌面小说下载与阅读应用 (based on lightnovel-crawler)"
+dynamic = ["version"]
+keywords = [
+  "lightnovel",
+  "webnovel",
+  "crawler",
+  "scraper",
+  "downloader",
+  "novel",
+  "ebook",
+  "epub",
+  "mobi",
+  "pdf",
+]
+license = "GPL-3.0-or-later"
+name = "xiaoxiong-novel"
+readme = "README.md"
+requires-python = ">=3.9"
+
+[project.optional-dependencies]
+build = [
+  "build>=1.2.0",
+  "pyinstaller>=6.0.0",
+  "setuptools>=75.3.0",
+  "tk-tools>=0.16.0",
+  "wheel>=0.40.0",
+]
+lsp = [
+  "pylsp-rope>=0.1.17",
+  "pyright>=1.1.409",
+  "python-lsp-ruff>=2.3.1",
+  "python-lsp-server[websockets]>=1.14.0",
+  "ruff>=0.9.0",
+]
+
+[dependency-groups]
+dev = [
+  "fonttools[woff]>=4.60.2",
+  "grpcio-tools<=1.78.0",
+  "lxml-stubs>=0.5.0",
+  "openai>=1.0.0",
+  "pre-commit>=4.3.0",
+  "ruff>=0.9.0",
+  "types-colorama>=0.4.0",
+  "types-passlib>=1.7.0",
+  "types-python-dateutil>=2.8.0",
+  "types-python-jose>=3.3.0",
+  "types-pyyaml>=6.0.12.20250915",
+  "types-setuptools>=65.0.0",
+  "types-tqdm>=4.65.0",
+  "types-zstd>=1.5.0",
+]
+
+[tool.uv.pip]
+extra-index-url = ["https://piwheels.org"]
+
+#[tool.uv.sources]
+#lncrawl-scraper = { git = "https://github.com/lncrawl/scraper", branch = "main" }
+
+[project.urls]
+"Changelog" = "https://github.com/Bearladin/bearreader/blob/main/CHANGELOG.md"
+"Documentation" = "https://github.com/Bearladin/bearreader/blob/main/README.md"
+"Issue Tracker" = "https://github.com/Bearladin/bearreader/issues"
+"Source Code" = "https://github.com/Bearladin/bearreader"
+
+[project.scripts]
+lncrawl = "lncrawl:main"
+xiaoxiong-novel = "lncrawl:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.dynamic]
+version = { file = "lncrawl/VERSION" }
+
+[tool.setuptools.packages.find]
+exclude = ["tests*", "docs*", "build*", "dist*"]
+include = ["lncrawl*", "sources*"]
+where = ["."]
+
+[tool.setuptools.package-data]
+lncrawl = ["**/*", "!**/*.py", "!**/__pycache__/*"]
+sources = ["**/*", "!**/*.py", "!**/__pycache__/*"]
+
+[tool.setuptools.exclude-package-data]
+"*" = ["__pycache__/*", "**/__pycache__/*"]
+
+[tool.ruff]
+extend-exclude = [
+  ".github",
+  "res",
+  "logs",
+  "Lightnovels",
+  "frontend",
+  "docs/superpowers/plans",
+]
+indent-width = 4
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = 88
+indent-style = "space"
+line-ending = "lf"
+quote-style = "double"
+
+[tool.ruff.lint]
+# https://docs.astral.sh/ruff/rules
+select = [
+  "I", # isort
+  "E", # pycodestyle
+  "W", # pycodestyle
+  "F", # Pyflakes
+]
+#"N",     # pep8-naming
+#"UP",    # pyupgrade
+#"B",     # flake8-bugbear
+#"S",     # flake8-bandit
+#"SIM",   # flake8-simplify
+#"ANN",   # flake8-annotations
+ignore = ["E203", "E265", "E501"]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+force-sort-within-sections = true
+known-first-party = ["lncrawl"]
+
+[tool.pyright]
+# Completely suppress all errors from these paths
+ignore = ["scripts/**"]

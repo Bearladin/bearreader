@@ -1,0 +1,46 @@
+from typing import Optional
+
+from pydantic import computed_field
+import sqlmodel as sa
+
+from ..context import ctx
+from ..enums import OutputFormat
+from ._base import BaseTable
+
+
+class Artifact(BaseTable, table=True):
+    __tablename__ = "artifacts"  # type: ignore
+
+    novel_id: str = sa.Field(index=True, foreign_key="novels.id", ondelete="CASCADE")
+    job_id: Optional[str] = sa.Field(foreign_key="jobs.id", ondelete="SET NULL")
+    user_id: Optional[str] = sa.Field(foreign_key="users.id", ondelete="SET NULL")
+    language: Optional[str] = sa.Field(default=None, description="Target language code, e.g. 'en'")
+    volume: Optional[int] = sa.Field(
+        default=None,
+        index=True,
+        description="Volume serial number when the artifact covers a single volume; "
+        "None means the artifact covers the whole novel",
+    )
+    format: OutputFormat = sa.Field(
+        sa_column=sa.Column(sa.Enum(OutputFormat, native_enum=False), nullable=False, index=True),
+        description="The output format of the artifact",
+    )
+    file_name: str = sa.Field(description="Artifact output file name")
+    file_size: int = sa.Field(
+        default=0,
+        sa_type=sa.BigInteger,
+        sa_column_kwargs={"server_default": sa.literal(0)},
+        description="Artifact output file size in bytes",
+    )
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def output_file(self) -> str:
+        """Artifact file path"""
+        return f"novels/{self.novel_id}/artifacts/{self.file_name}"
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def is_available(self) -> bool:
+        """Content file is available"""
+        return ctx.files.exists(self.output_file)

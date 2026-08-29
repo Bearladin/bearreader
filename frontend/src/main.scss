@@ -1,0 +1,228 @@
+/* Reader fonts remain bundled for offline reading. */
+@font-face {
+  font-family: 'XiaoXiong Reader Kai';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/XiaoXiongReaderKai-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'XiaoXiong Reader Serif';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/XiaoXiongReaderSerif-Regular.woff2') format('woff2');
+}
+
+:root {
+  --br-paper: #fafaf7;
+  --br-surface: #fff;
+  --br-ink: #171717;
+  --br-secondary: #686868;
+  --br-muted: #8a8a84;
+  --br-border: #d8d8d4;
+  --br-border-strong: #a6a6a0;
+  --br-hover: #f1f1ee;
+  --br-selected: #e8e8e4;
+  --br-serif: SimSun, 'Songti SC', 'Noto Serif CJK SC', 'Microsoft YaHei', serif;
+  --br-sans: 'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--br-ink);
+  background: var(--br-paper);
+  font-family: var(--br-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.br-serif {
+  font-family: var(--br-serif);
+  letter-spacing: 0.01em;
+}
+
+code,
+pre,
+kbd {
+  font-family: Consolas, 'SFMono-Regular', monospace;
+}
+
+a {
+  color: var(--br-ink);
+  text-decoration-color: var(--br-border-strong);
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  color: var(--br-secondary);
+  text-decoration-color: var(--br-ink);
+}
+
+::selection {
+  color: var(--br-ink);
+  background: var(--br-selected);
+}
+
+:focus-visible {
+  outline: 2px solid var(--br-ink);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: var(--br-border-strong);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--br-paper);
+}
+
+.br-page-container {
+  width: 100%;
+  max-width: 1480px;
+  margin: 0 auto;
+}
+
+.br-page-title {
+  margin: 0 !important;
+  color: var(--br-ink) !important;
+  font-family: var(--br-serif) !important;
+  font-weight: 600 !important;
+}
+
+.br-section-label {
+  color: var(--br-muted);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.ant-card,
+.ant-card-hoverable,
+.ant-card-hoverable:hover {
+  border-color: var(--br-border) !important;
+  border-radius: 2px !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.ant-card-head {
+  min-height: 48px;
+  border-bottom-color: var(--br-border) !important;
+}
+
+.ant-btn,
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-select-selector,
+.ant-input-number,
+.ant-tag,
+.ant-alert,
+.ant-pagination-item {
+  border-radius: 2px !important;
+  box-shadow: none !important;
+}
+
+.ant-btn-primary {
+  border-color: var(--br-ink) !important;
+  background: var(--br-ink) !important;
+  color: #fff !important;
+}
+
+.ant-btn-primary:hover {
+  border-color: #3f3f3f !important;
+  background: #3f3f3f !important;
+}
+
+.ant-menu-item-selected {
+  border-left: 2px solid var(--br-ink);
+  font-weight: 600;
+}
+
+.ant-menu-item::after {
+  display: none;
+}
+
+.ant-modal-content,
+.ant-drawer-content {
+  border: 1px solid var(--br-border);
+  border-radius: 4px !important;
+}
+
+.ant-progress-bg {
+  border-radius: 0 !important;
+}
+
+.ant-form-item {
+  margin-bottom: 12px;
+}
+
+.ant-form-item-explain {
+  font-size: 12px !important;
+}
+
+.ant-space-vertical {
+  width: 100%;
+}
+
+.br-status-running { color: #53677a; }
+.br-status-success { color: #51705a; }
+.br-status-error { color: #9a514a; }
+.br-status-warning { color: #967238; }
+
+input:-webkit-autofill,
+input:-webkit-autofill:focus {
+  transition: background-color 600000s 0s, color 600000s 0s;
+}
+
+input[data-autocompleted] {
+  background-color: transparent !important;
+}
+
+#terminalEditor span.line {
+  display: block;
+  padding: 0 8px;
+  font-size: 14px;
+  line-height: 18px;
+}
+
+@keyframes blinking-caret {
+  0%, 28% { opacity: 1; }
+  32%, 68% { opacity: 0; }
+  72%, 100% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media screen and (max-width: 767px) {
+  main.ant-layout-content {
+    padding-bottom: 64px;
+  }
+}

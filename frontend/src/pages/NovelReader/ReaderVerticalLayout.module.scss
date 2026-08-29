@@ -1,0 +1,35 @@
+.layout {
+  padding: 25px;
+  width: 100%;
+  min-height: calc(100vh - 50px);
+
+  .content {
+    flex: 1;
+    width: 100%;
+    margin: 5px auto;
+    max-width: 85ch;
+    min-height: 100%;
+
+    &.speaking {
+      user-select: none;
+
+      & > * {
+        cursor: pointer;
+      }
+
+      & > [data-focus] {
+        border-radius: 2px;
+        outline-offset: 7px;
+        outline: 1px solid currentColor;
+      }
+    }
+  }
+
+  &.mobile {
+    padding: 15px;
+
+    .content {
+      margin-bottom: 50px;
+    }
+  }
+}

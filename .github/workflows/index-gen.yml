@@ -1,0 +1,57 @@
+name: Validate Chinese source distribution
+
+on:
+  push:
+    paths:
+      - "sources/zh/**"
+      - "scripts/build_distribution_sources.py"
+      - "scripts/verify_distribution_sources.py"
+      - "scripts/verify_distribution_hardening.py"
+      - "scripts/verify_workflow_safety.py"
+      - "scripts/sync_localized_frontend.py"
+      - "BUILD_AND_RELEASE.md"
+      - "lncrawl/distribution.py"
+      - "lncrawl/services/sources/helper.py"
+      - "lncrawl/server/models/sources.py"
+      - ".github/workflows/release.yml"
+      - ".github/workflows/index-gen.yml"
+      - ".github/workflows/web.yml"
+  pull_request:
+    paths:
+      - "sources/zh/**"
+      - "scripts/build_distribution_sources.py"
+      - "scripts/verify_distribution_sources.py"
+      - "scripts/verify_distribution_hardening.py"
+      - "scripts/verify_workflow_safety.py"
+      - "scripts/sync_localized_frontend.py"
+      - "BUILD_AND_RELEASE.md"
+      - "lncrawl/distribution.py"
+      - "lncrawl/services/sources/helper.py"
+      - "lncrawl/server/models/sources.py"
+      - ".github/workflows/release.yml"
+      - ".github/workflows/index-gen.yml"
+      - ".github/workflows/web.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - name: Install validation dependencies
+        run: uv sync --frozen --all-extras --all-groups
+      - name: Build and validate offline Chinese sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run python scripts/build_distribution_sources.py --output build/distribution-sources
+          uv run python scripts/verify_distribution_sources.py build/distribution-sources
+          uv run python scripts/verify_distribution_hardening.py source-overlap
+          uv run python scripts/verify_workflow_safety.py
