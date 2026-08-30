@@ -75,6 +75,7 @@ export const NovelReaderPage: React.FC<any> = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const autoFetch = useSelector(Reader.select.autoFetch);
+  const lastReads = useSelector(Reader.select.lastReads);
 
   const [refreshId, setRefreshId] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -245,11 +246,25 @@ export const NovelReaderPage: React.FC<any> = () => {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [data, navigate]);
 
+  // Restore the saved scroll offset when reopening the same chapter,
+  // otherwise start at the top. Double-rAF waits for the content layout.
   useEffect(() => {
     if (!data) return;
 
-    // reset scroll position
-    window.scrollTo(0, 0);
+    const saved = lastReads[data.novel.id];
+    const target =
+      saved && saved.chapterId === data.chapter.id ? saved.offset : 0;
+    let raf1 = 0;
+    let raf2 = 0;
+    raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        const max = Math.max(
+          0,
+          document.documentElement.scrollHeight - window.innerHeight
+        );
+        window.scrollTo(0, Math.min(target, max));
+      });
+    });
 
     // reset speaking position
     store.dispatch(Reader.action.setSepakPosition(0));
@@ -258,6 +273,36 @@ export const NovelReaderPage: React.FC<any> = () => {
     if (data && !data.content && data.chapter.is_done) {
       store.dispatch(Reader.action.setSpeaking(false));
     }
+
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, [data, lastReads]);
+
+  // Persist the reading offset (throttled) so "continue reading" reopens
+  // at the same spot. Only the currently opened chapter writes history.
+  useEffect(() => {
+    if (!data) return;
+    let lastWrite = 0;
+    const onScroll = () => {
+      const now = Date.now();
+      if (now - lastWrite < 500) return;
+      lastWrite = now;
+      const max = Math.max(
+        0,
+        document.documentElement.scrollHeight - window.innerHeight
+      );
+      store.dispatch(
+        Reader.action.setLastRead({
+          novelId: data.novel.id,
+          chapterId: data.chapter.id,
+          offset: Math.min(Math.max(0, window.scrollY), max),
+        })
+      );
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
   }, [data]);
 
   if (loading) {

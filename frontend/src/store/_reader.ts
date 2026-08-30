@@ -9,6 +9,11 @@ import type { RootState } from '.';
 // Initial State
 //
 
+export interface LastRead {
+  chapterId: string;
+  offset: number;
+}
+
 export interface ReaderState {
   voice: string | undefined;
   voiceSpeed: number;
@@ -22,6 +27,8 @@ export interface ReaderState {
   fontFamily: FontFamily;
   textAlign: TextAlign;
   autoFetch: boolean;
+  /** 每本书最后阅读位置（key=novelId）；继续阅读恢复滚动用 */
+  lastReads: Record<string, LastRead>;
 }
 
 const buildInitialState = (): ReaderState => ({
@@ -37,6 +44,7 @@ const buildInitialState = (): ReaderState => ({
   fontFamily: FontFamily.MicrosoftYaHei,
   autoFetch: false,
   textAlign: TextAlign.left,
+  lastReads: {},
 });
 
 //
@@ -83,6 +91,17 @@ export const ReaderSlice = createSlice({
     setAutoFetch(state, action: PayloadAction<boolean>) {
       state.autoFetch = action.payload;
     },
+    setLastRead(
+      state,
+      action: PayloadAction<{
+        novelId: string;
+        chapterId: string;
+        offset: number;
+      }>
+    ) {
+      const { novelId, chapterId, offset } = action.payload;
+      state.lastReads[novelId] = { chapterId, offset };
+    },
   },
 });
 
@@ -109,6 +128,7 @@ export const Reader = {
       selectReader,
       (reader) => reader.speakPosition
     ),
+    lastReads: createSelector(selectReader, (reader) => reader.lastReads),
   },
 };
 
@@ -123,7 +143,7 @@ const blacklist: Array<keyof ReaderState> = [
 
 export const readerPersistConfig: PersistConfig<ReaderState> = {
   key: 'reader',
-  version: 2,
+  version: 3,
   storage,
   blacklist,
   migrate: async (state) => {
@@ -135,6 +155,6 @@ export const readerPersistConfig: PersistConfig<ReaderState> = {
       ? persisted.fontFamily
       : FontFamily.MicrosoftYaHei;
 
-    return { ...state, fontFamily };
+    return { ...state, fontFamily, lastReads: persisted.lastReads ?? {} };
   },
 };
