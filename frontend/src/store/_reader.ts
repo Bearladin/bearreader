@@ -62,7 +62,8 @@ export const ReaderSlice = createSlice({
       state.textAlign = action.payload;
     },
     setFontSize(state, action: PayloadAction<ReaderState['fontSize']>) {
-      state.fontSize = action.payload;
+      // clamp 到可读范围；设置面板与 NavBar 快捷按钮共用此约束
+      state.fontSize = Math.min(32, Math.max(12, action.payload));
     },
     setFontFamily(state, action: PayloadAction<ReaderState['fontFamily']>) {
       state.fontFamily = action.payload;

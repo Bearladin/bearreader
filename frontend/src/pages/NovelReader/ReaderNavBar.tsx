@@ -7,6 +7,8 @@ import type { ReadChapter } from '@/types';
 import {
   BorderOutlined,
   LeftOutlined,
+  MinusOutlined,
+  PlusOutlined,
   RightOutlined,
   SoundOutlined,
   StepBackwardOutlined,
@@ -27,6 +29,15 @@ export const ReaderNavBar: React.FC<{
   const theme = useSelector(Reader.select.theme);
   const speaking = useSelector(Reader.select.speaking);
   const position = useSelector(Reader.select.speakPosition);
+  const fontSize = useSelector(Reader.select.fontSize);
+
+  const decreaseFontSize = () => {
+    store.dispatch(Reader.action.setFontSize(fontSize - 1));
+  };
+
+  const increaseFontSize = () => {
+    store.dispatch(Reader.action.setFontSize(fontSize + 1));
+  };
 
   const goPrevious = () => {
     if (data.previous_id) {
@@ -99,6 +110,28 @@ export const ReaderNavBar: React.FC<{
       >
         <LeftOutlined />
         {md && ' 上一章'}
+      </div>
+
+      <div
+        aria-label="减小字号"
+        role="button"
+        tabIndex={0}
+        onClick={decreaseFontSize}
+        onKeyDown={handleActionKeyDown(decreaseFontSize)}
+        className={styles.item}
+      >
+        <MinusOutlined />
+      </div>
+
+      <div
+        aria-label="增大字号"
+        role="button"
+        tabIndex={0}
+        onClick={increaseFontSize}
+        onKeyDown={handleActionKeyDown(increaseFontSize)}
+        className={styles.item}
+      >
+        <PlusOutlined />
       </div>
 
       {data.content &&
