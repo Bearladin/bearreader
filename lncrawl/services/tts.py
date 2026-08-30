@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import OrderedDict
 import hashlib
 import logging
 from typing import List, Tuple
@@ -91,7 +92,8 @@ MIN_RATE = 0.5
 MAX_RATE = 1.5
 
 _SENTENCE_TIMEOUT = 20.0  # 单句合成超时（秒）
-_CACHE_LIMIT = 512  # 音频 LRU 上限（条）
+_CACHE_LIMIT = 512  # 音频缓存条数上限，超出按 LRU 逐出
+_CACHE_BYTES = 64 * 1024 * 1024  # 音频缓存字节总上限，防止顶格长句撑大内存
 
 
 def _rate_format(rate: float) -> str:
@@ -104,7 +106,8 @@ class TtsService:
     """edge-tts 在线合成服务。每句一个独立连接，无状态。"""
 
     def __init__(self) -> None:
-        self._cache: dict[str, bytes] = {}
+        self._cache: OrderedDict[str, bytes] = OrderedDict()
+        self._cache_bytes: int = 0
 
     def list_voices(self) -> List[dict]:
         return list(VOICES)
@@ -118,6 +121,7 @@ class TtsService:
         cache_key = hashlib.sha1(f"{text}\x00{voice}\x00{rate}".encode()).hexdigest()
         cached = self._cache.get(cache_key)
         if cached is not None:
+            self._cache.move_to_end(cache_key)
             return cached
 
         import edge_tts
@@ -143,7 +147,9 @@ class TtsService:
         audio = b"".join(chunks)
         if not audio:
             raise ValueError("语音合成返回空音频")
-        if len(self._cache) >= _CACHE_LIMIT:
-            self._cache.pop(next(iter(self._cache)))
         self._cache[cache_key] = audio
+        self._cache_bytes += len(audio)
+        while self._cache_bytes > _CACHE_BYTES or len(self._cache) > _CACHE_LIMIT:
+            _, oldest = self._cache.popitem(last=False)
+            self._cache_bytes -= len(oldest)
         return audio

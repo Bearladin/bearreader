@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 
 - **Batch volume and chapter fetch jobs now show the novel title** — The batch creators skipped the novel-title fallback the single-item creators have, so jobs created from the novel page showed only the item count.
+- **The TTS audio cache is a real LRU with a size cap** — Hits now refresh recency and a 64 MB total cap bounds memory, replacing the FIFO behavior the old comment wrongly claimed.
 
 ## [1.3.0] - 2026-08-29
 
