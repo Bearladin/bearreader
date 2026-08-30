@@ -1,11 +1,18 @@
+import { readFileSync } from 'node:fs';
 import react from '@vitejs/plugin-react-swc';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
+// 应用版本单一来源：后端 lncrawl/VERSION。构建时注入，前端不再手工维护版本号。
+const APP_VERSION = readFileSync(new URL('../lncrawl/VERSION', import.meta.url), 'utf-8').trim();
+
 // https://vite.dev/config/
 export default defineConfig({
   base: '/',
+  define: {
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
+  },
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
