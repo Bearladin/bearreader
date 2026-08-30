@@ -23,7 +23,7 @@ const entries: ChangeEntry[] = [
         界面使用系统字体（微软雅黑 / 苹方 / 思源黑体），阅读器保留内置「小熊楷体」「小熊宋体」；不再附带不可再分发的字体文件。
       </span>,
       <span key="portable-default">
-        默认发行物为 Windows 绿色 ZIP：同一发行标签同时提供完整源码归档、许可证与 SHA256 校验清单。
+        默认发行物为 Windows 绿色 ZIP：同一发行标签同时提供完整源码归档、许可证与哈希校验清单。
       </span>,
     ],
   },
