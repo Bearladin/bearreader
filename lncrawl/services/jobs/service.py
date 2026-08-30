@@ -262,11 +262,20 @@ class JobService:
         depends_on: Optional[str] = None,
         **data: Any,
     ) -> Job:
+        first_volume = ctx.volumes.get(volume_ids[0])
         data.update(
             {
                 "volume_ids": volume_ids,
             }
         )
+        if not data.get("novel_title"):
+            novel = ctx.novels.get(first_volume.novel_id)
+            data.update(
+                {
+                    "novel_id": novel.id,
+                    "novel_title": novel.title,
+                }
+            )
         return self._create(
             user=user,
             data=data,
@@ -315,11 +324,20 @@ class JobService:
         depends_on: Optional[str] = None,
         **data: Any,
     ) -> Job:
+        first_chapter = ctx.chapters.get(chapter_ids[0])
         data.update(
             {
                 "chapter_ids": chapter_ids,
             }
         )
+        if not data.get("novel_title"):
+            novel = ctx.novels.get(first_chapter.novel_id)
+            data.update(
+                {
+                    "novel_id": novel.id,
+                    "novel_title": novel.title,
+                }
+            )
         return self._create(
             user=user,
             data=data,
