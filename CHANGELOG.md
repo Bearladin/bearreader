@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Quick font-size buttons in the reader navbar** — Plus/minus buttons with a 12–32 px clamp shared by the settings panel.
+- **Keyboard shortcuts in the reader** — Arrow keys turn chapters or TTS paragraphs, Space scrolls a screen and page-turns at the chapter bottom, and S toggles reading aloud; system media keys control TTS through MediaSession.
+- **TTS keeps reading across chapter turns** — Reaching the end of a chapter or navigating mid-playback continues into the next chapter from its start.
+- **Reading position resume** — The reader reopens a chapter at the last scroll offset per novel, so continue-reading lands where you stopped.
+- **Auto-scroll and TTS-follow scrolling** — An optional steady scroll with an adjustable speed that cancels on manual input, and the view smoothly follows the paragraph being read.
+- **Search and sorting for novels and libraries** — The catalog gains a sort dropdown, and library listings gain search plus five sort orders.
+
 ### Fixed
 
 - **Batch volume and chapter fetch jobs now show the novel title** — The batch creators skipped the novel-title fallback the single-item creators have, so jobs created from the novel page showed only the item count.
