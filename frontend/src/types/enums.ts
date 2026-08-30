@@ -74,6 +74,43 @@ export const OutputFormat = {
 };
 export type OutputFormat = (typeof OutputFormat)[keyof typeof OutputFormat];
 
+export const NovelSort = {
+  popular: 'popular',
+  updated: 'updated',
+  created: 'created',
+  chapters: 'chapters',
+  title_asc: 'title_asc',
+  title_desc: 'title_desc',
+};
+export type NovelSort = (typeof NovelSort)[keyof typeof NovelSort];
+
+export const LibraryNovelSort = {
+  updated: 'updated',
+  created: 'created',
+  chapters: 'chapters',
+  title_asc: 'title_asc',
+  title_desc: 'title_desc',
+};
+export type LibraryNovelSort =
+  (typeof LibraryNovelSort)[keyof typeof LibraryNovelSort];
+
+export const NOVEL_SORT_LABELS: Record<NovelSort, string> = {
+  popular: '人气最高',
+  updated: '最近更新',
+  created: '最近收录',
+  chapters: '章节最多',
+  title_asc: '书名升序',
+  title_desc: '书名降序',
+};
+
+export const LIBRARY_SORT_LABELS: Record<LibraryNovelSort, string> = {
+  updated: '最近更新',
+  created: '最近收录',
+  chapters: '章节最多',
+  title_asc: '书名升序',
+  title_desc: '书名降序',
+};
+
 export const FontFamily = {
   MicrosoftYaHei:
     '"Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif',

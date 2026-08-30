@@ -3,7 +3,7 @@ from typing import List
 from fastapi import APIRouter, Path, Query, Security
 
 from ...context import ctx
-from ...dao import ActivityType, Library, Novel, User
+from ...dao import ActivityType, Library, LibraryNovelSort, Novel, User
 from ...server.models import (
     LibraryCreateRequest,
     LibraryItem,
@@ -152,6 +152,8 @@ def list_library_novels(
     library_id: str = Path(),
     offset: int = Query(default=0),
     limit: int = Query(default=20, le=100),
+    search: str = Query(default="", help="Search query"),
+    sort: LibraryNovelSort = Query(default=LibraryNovelSort.updated, help="Sort order"),
     user: User = Security(ensure_user),
 ) -> Paginated[Novel]:
     return ctx.libraries.list_novels(
@@ -159,6 +161,8 @@ def list_library_novels(
         user=user,
         offset=offset,
         limit=limit,
+        search=search.strip(),
+        sort=sort,
     )
 
 

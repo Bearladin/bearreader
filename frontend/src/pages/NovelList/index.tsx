@@ -54,6 +54,7 @@ export const NovelListPage: React.FC<any> = () => {
   const {
     search: initialSearch,
     domain: initialDomain,
+    sort: initialSort,
     currentPage,
     perPage,
     error,
@@ -104,6 +105,7 @@ export const NovelListPage: React.FC<any> = () => {
       <NovelFilterBox
         search={initialSearch}
         domain={initialDomain}
+        sort={initialSort}
         updateParams={updateParams}
       />
 

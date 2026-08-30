@@ -1,6 +1,12 @@
 import { ErrorState } from '@/components/Loading/ErrorState';
 import { LoadingState } from '@/components/Loading/LoadingState';
-import type { Library, Novel, Paginated } from '@/types';
+import {
+  type Library,
+  type LibraryNovelSort,
+  LIBRARY_SORT_LABELS,
+  type Novel,
+  type Paginated,
+} from '@/types';
 import { stringifyError } from '@/utils/errors';
 import {
   AppstoreOutlined,
@@ -11,9 +17,11 @@ import {
   Divider,
   Empty,
   Flex,
+  Input,
   Pagination,
   Row,
   Segmented,
+  Select,
   Space,
   Typography,
 } from 'antd';
@@ -37,6 +45,8 @@ export const LibraryNovelList: React.FC<{
   const [view, setView] = useState<'grid' | 'list'>(() =>
     localStorage.getItem('bearreader/library/view') === 'grid' ? 'grid' : 'list'
   );
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<LibraryNovelSort>('updated');
 
   useEffect(() => {
     setLoading(true);
@@ -49,6 +59,8 @@ export const LibraryNovelList: React.FC<{
             params: {
               limit: PAGE_SIZE,
               offset: (page - 1) * PAGE_SIZE,
+              search: search.trim(),
+              sort,
             },
           }
         );
@@ -61,7 +73,7 @@ export const LibraryNovelList: React.FC<{
       }
     };
     loadNovels();
-  }, [library.id, refresh, page]);
+  }, [library.id, refresh, page, search, sort]);
 
   if (loading) {
     return <LoadingState />;
@@ -103,6 +115,34 @@ export const LibraryNovelList: React.FC<{
       </Flex>
 
       <Divider size="small" />
+
+      <Flex align="center" gap={8} wrap style={{ marginBottom: 12 }}>
+        <Input.Search
+          allowClear
+          placeholder="搜索书架内小说"
+          defaultValue={search}
+          onSearch={(value) => {
+            setPage(1);
+            setSearch(value);
+          }}
+          style={{ maxWidth: 320 }}
+        />
+        <Select
+          value={sort}
+          onChange={(value: LibraryNovelSort) => {
+            setPage(1);
+            setSort(value);
+          }}
+          options={Object.entries(LIBRARY_SORT_LABELS).map(
+            ([value, label]) => ({
+              value: value as LibraryNovelSort,
+              label,
+            })
+          )}
+          style={{ width: 140 }}
+          aria-label="书架排序方式"
+        />
+      </Flex>
 
       <Space vertical style={{ width: '100%' }} size="middle">
         {novels.length ? (

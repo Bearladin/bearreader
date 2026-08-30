@@ -3,7 +3,15 @@ from typing import List, Optional
 import sqlmodel as sq
 
 from ..context import ctx
-from ..dao import Library, LibraryFavorite, LibraryNovel, Novel, User, UserRole
+from ..dao import (
+    Library,
+    LibraryFavorite,
+    LibraryNovel,
+    LibraryNovelSort,
+    Novel,
+    User,
+    UserRole,
+)
 from ..exceptions import ServerErrors
 from ..server.models import LibraryItem, Paginated
 
@@ -277,6 +285,8 @@ class LibraryService:
         *,
         offset: int = 0,
         limit: int = 20,
+        search: str = "",
+        sort: LibraryNovelSort = LibraryNovelSort.updated,
     ) -> Paginated[Novel]:
         with ctx.db.session() as sess:
             library = self._get_library(sess, library_id)
@@ -287,14 +297,36 @@ class LibraryService:
                 .select_from(LibraryNovel)
                 .where(LibraryNovel.library_id == library_id)
             )
-            stmt = (
-                sq.select(Novel)
-                .join(LibraryNovel, sq.col(LibraryNovel.novel_id) == sq.col(Novel.id))
-                .where(LibraryNovel.library_id == library_id)
-                .order_by(sq.desc(Novel.updated_at))
-                .offset(offset)
-                .limit(limit)
+            stmt = sq.select(Novel).join(
+                LibraryNovel, sq.col(LibraryNovel.novel_id) == sq.col(Novel.id)
             )
+
+            conditions = []
+            if search.strip():
+                like = f"%{search.strip()}%"
+                conditions.append(
+                    sq.or_(
+                        sq.col(Novel.title).ilike(like),
+                        sq.col(Novel.authors).ilike(like),
+                    )
+                )
+            conditions.append(sq.col(LibraryNovel.library_id) == library_id)
+            cnd = sq.and_(*conditions)
+            stmt = stmt.where(cnd)
+            cnt = cnt.where(cnd)
+
+            if sort == LibraryNovelSort.created:
+                stmt = stmt.order_by(sq.desc(Novel.created_at))
+            elif sort == LibraryNovelSort.chapters:
+                stmt = stmt.order_by(sq.desc(Novel.chapter_count))
+            elif sort == LibraryNovelSort.title_asc:
+                stmt = stmt.order_by(sq.asc(Novel.title))
+            elif sort == LibraryNovelSort.title_desc:
+                stmt = stmt.order_by(sq.desc(Novel.title))
+            else:
+                stmt = stmt.order_by(sq.desc(Novel.updated_at))
+
+            stmt = stmt.offset(offset).limit(limit)
 
             total = sess.exec(cnt).one()
             items = sess.exec(stmt).all()

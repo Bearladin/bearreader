@@ -110,6 +110,14 @@ class NovelSort(str, Enum):
     title_desc = "title_desc"
 
 
+class LibraryNovelSort(str, Enum):
+    updated = "updated"
+    created = "created"
+    chapters = "chapters"
+    title_asc = "title_asc"
+    title_desc = "title_desc"
+
+
 class ActivityType(IntEnum):
     LIBRARY = 1
     NOVEL = 2

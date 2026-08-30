@@ -10,6 +10,7 @@ interface SearchParams {
   page?: number;
   search?: string;
   domain?: string;
+  sort?: string;
 }
 
 export function useNovelList() {
@@ -33,6 +34,11 @@ export function useNovelList() {
     [searchParams]
   );
 
+  const sort = useMemo(
+    () => searchParams.get('sort') || 'updated',
+    [searchParams]
+  );
+
   const currentPage = useMemo(
     () => parseInt(searchParams.get('page') || '1', 10),
     [searchParams]
@@ -52,6 +58,7 @@ export function useNovelList() {
   const fetchNovels = async (
     search: string,
     domain: string,
+    sort: string,
     page: number,
     limit: number
   ) => {
@@ -59,7 +66,7 @@ export function useNovelList() {
     try {
       const offset = (page - 1) * limit;
       const { data } = await axios.get<Paginated<Novel>>('/api/novels', {
-        params: { search, offset, limit, domain },
+        params: { search, offset, limit, domain, sort },
       });
       setTotal(data.total);
       setNovels(data.items);
@@ -72,10 +79,10 @@ export function useNovelList() {
 
   useEffect(() => {
     const tid = setTimeout(() => {
-      fetchNovels(search, domain, currentPage, perPage);
+      fetchNovels(search, domain, sort, currentPage, perPage);
     }, 50);
     return () => clearTimeout(tid);
-  }, [search, domain, currentPage, perPage, refreshId]);
+  }, [search, domain, sort, currentPage, perPage, refreshId]);
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -101,6 +108,11 @@ export function useNovelList() {
         } else if (typeof updates.domain !== 'undefined') {
           next.delete('domain');
         }
+        if (updates.sort && updates.sort !== 'updated') {
+          next.set('sort', String(updates.sort));
+        } else if (typeof updates.sort !== 'undefined') {
+          next.delete('sort');
+        }
         return next;
       });
     }, 100);
@@ -111,6 +123,7 @@ export function useNovelList() {
     perPage,
     currentPage,
     domain,
+    sort,
     novels,
     total,
     loading,

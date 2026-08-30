@@ -1,12 +1,21 @@
 import { stringifyError } from '@/utils/errors';
+import {
+  NOVEL_SORT_LABELS,
+  NovelSort,
+} from '@/types';
 import { Flex, Input, message, Select } from 'antd';
 import axios from 'axios';
 import { useEffect, useMemo, useState } from 'react';
 import { type NovelListHook } from './hooks';
 
 export const NovelFilterBox: React.FC<
-  Pick<NovelListHook, 'search' | 'domain' | 'updateParams'>
-> = ({ search: initialSearch, domain: initialDomain, updateParams }) => {
+  Pick<NovelListHook, 'search' | 'domain' | 'sort' | 'updateParams'>
+> = ({
+  search: initialSearch,
+  domain: initialDomain,
+  sort: initialSort,
+  updateParams,
+}) => {
   const [loading, setLoading] = useState(false);
   const [domains, setDomains] = useState<Record<string, number>>({});
 
@@ -41,6 +50,19 @@ export const NovelFilterBox: React.FC<
 
   return (
     <Flex align="center" justify="space-between" gap="8px" wrap>
+      {/* Sort Select */}
+      <Select
+        value={(initialSort || 'updated') as NovelSort}
+        onChange={(value: NovelSort) => updateParams({ sort: value, page: 1 })}
+        options={Object.entries(NOVEL_SORT_LABELS).map(([value, label]) => ({
+          value: value as NovelSort,
+          label,
+        }))}
+        style={{ width: 140 }}
+        size="large"
+        aria-label="排序方式"
+      />
+
       {/* Domain Select */}
       <Select
         virtual={false}
