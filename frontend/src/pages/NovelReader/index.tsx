@@ -12,8 +12,9 @@ import { LRUCache } from 'lru-cache';
 import { useEffect, useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { useSelector } from 'react-redux';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { ReaderVerticalLayout } from './ReaderVerticalLayout';
+import { focusReaderPosition } from './utils';
 
 const fetchJobs = new LRUCache<string, Promise<Job>>({ max: 1000 });
 const cache = new LRUCache<string, Promise<ReadChapter>>({ max: 1000 });
@@ -72,6 +73,7 @@ function createFetchJob(id: string) {
 
 export const NovelReaderPage: React.FC<any> = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const autoFetch = useSelector(Reader.select.autoFetch);
 
   const [refreshId, setRefreshId] = useState(0);
@@ -182,6 +184,66 @@ export const NovelReaderPage: React.FC<any> = () => {
       return () => clearInterval(iid);
     }
   }, [data?.chapter.id, data?.chapter.is_done, job?.is_done, job?.id]);
+
+  // Reader hotkeys: ←/→ chapter or paragraph, Space scroll/page, S speak.
+  // Reads live values from the store so the listener never goes stale.
+  useEffect(() => {
+    if (!data) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        e.ctrlKey ||
+        e.altKey ||
+        e.metaKey ||
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+      const isSpeaking = Reader.select.speaking(store.getState());
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        const forward = e.key === 'ArrowRight';
+        if (isSpeaking) {
+          e.preventDefault();
+          const position = Reader.select.speakPosition(store.getState());
+          const next = forward ? position + 1 : Math.max(0, position - 1);
+          if (next !== position || forward) {
+            store.dispatch(Reader.action.setSepakPosition(next));
+            focusReaderPosition(next);
+          }
+        } else if (!e.repeat) {
+          e.preventDefault();
+          const dest = forward ? data.next_id : data.previous_id;
+          if (dest) navigate(`/read/${dest}`);
+        }
+        return;
+      }
+      if (e.key === ' ') {
+        e.preventDefault();
+        const doc = document.documentElement;
+        const atBottom =
+          window.scrollY + window.innerHeight >= doc.scrollHeight - 10;
+        if (atBottom && !isSpeaking && !e.repeat && data.next_id) {
+          navigate(`/read/${data.next_id}`);
+          return;
+        }
+        window.scrollBy({ top: window.innerHeight * 0.9, behavior: 'auto' });
+        return;
+      }
+      if (e.key === 's' || e.key === 'S') {
+        e.preventDefault();
+        if (isSpeaking) {
+          store.dispatch(Reader.action.setSpeaking(false));
+        } else if (data.content) {
+          store.dispatch(Reader.action.setSpeaking(true));
+          focusReaderPosition(Reader.select.speakPosition(store.getState()));
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [data, navigate]);
 
   useEffect(() => {
     if (!data) return;

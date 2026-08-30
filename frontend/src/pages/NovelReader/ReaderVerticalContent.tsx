@@ -126,6 +126,41 @@ function useEdgeTtsSpeech(
     inflightAudios.current.clear();
   }, [speaking]);
 
+  // MediaSession: system media keys and the OS media flyout control TTS,
+  // so playback can be toggled while the window is minimized.
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) {
+      return;
+    }
+    if (speaking) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: data.chapter.title.trim(),
+        artist: data.novel.title,
+        album: 'BearReader',
+      });
+      navigator.mediaSession.playbackState = 'playing';
+    } else {
+      navigator.mediaSession.playbackState = 'paused';
+    }
+  }, [speaking, data]);
+
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) {
+      return;
+    }
+    navigator.mediaSession.setActionHandler('play', () => {
+      store.dispatch(Reader.action.setSpeaking(true));
+    });
+    navigator.mediaSession.setActionHandler('pause', () => {
+      store.dispatch(Reader.action.setSpeaking(false));
+    });
+    return () => {
+      navigator.mediaSession.setActionHandler('play', null);
+      navigator.mediaSession.setActionHandler('pause', null);
+      navigator.mediaSession.playbackState = 'paused';
+    };
+  }, []);
+
   // 后台预取：边合成边播的缓冲
   useEffect(() => {
     if (!speaking || !contentEl) return;

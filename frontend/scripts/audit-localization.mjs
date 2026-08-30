@@ -45,6 +45,8 @@ const uiPropertyNames = new Set([
 const technicalTokens = [
   'API',
   'Argon2id',
+  'ArrowLeft',
+  'ArrowRight',
   'AZW3',
   'BTC',
   'CAPTCHA',
