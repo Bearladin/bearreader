@@ -116,8 +116,13 @@ export const NovelReaderPage: React.FC<any> = () => {
     }
     return () => {
       stale = true;
-      // switching chapters stops TTS playback and clears its pipeline
-      store.dispatch(Reader.action.setSpeaking(false));
+      // Chapter-to-chapter navigation keeps TTS playing: the new chapter's
+      // layout remounts and resumes from paragraph 0. Leaving /read/* is the
+      // only place that stops playback here (navigate() already pushed the
+      // new URL by the time this cleanup runs).
+      if (!window.location.pathname.startsWith('/read/')) {
+        store.dispatch(Reader.action.setSpeaking(false));
+      }
     };
   }, [id, refreshId]);
 
