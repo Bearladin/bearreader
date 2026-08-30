@@ -287,6 +287,7 @@ export const ReaderVerticalContent: React.FC<{
     const fid = requestAnimationFrame(() => {
       const childEl = contentEl?.children[position];
       childEl?.setAttribute('data-focus', 'true');
+      childEl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
     return () => {
       cancelAnimationFrame(fid);

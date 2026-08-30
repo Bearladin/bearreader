@@ -10,6 +10,7 @@ import { Link } from 'react-router-dom';
 import { JobDetailsCard } from '../JobDetails/JobDetailsCard';
 import { ReaderNavBar } from './ReaderNavBar';
 import { ReaderVerticalContent } from './ReaderVerticalContent';
+import { useAutoScroll } from './useAutoScroll';
 
 export const ReaderVerticalLayout: React.FC<{
   data: ReadChapter;
@@ -22,6 +23,11 @@ export const ReaderVerticalLayout: React.FC<{
   const textAlign = useSelector(Reader.select.textAlign);
   const fontFamily = useSelector(Reader.select.fontFamily);
   const autoFetch = useSelector(Reader.select.autoFetch);
+  const autoScroll = useSelector(Reader.select.autoScroll);
+  const autoScrollSpeed = useSelector(Reader.select.autoScrollSpeed);
+  const speaking = useSelector(Reader.select.speaking);
+
+  useAutoScroll(autoScroll, autoScrollSpeed, speaking);
 
   return (
     <Flex

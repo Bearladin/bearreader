@@ -27,6 +27,8 @@ export interface ReaderState {
   fontFamily: FontFamily;
   textAlign: TextAlign;
   autoFetch: boolean;
+  autoScroll: boolean;
+  autoScrollSpeed: number;
   /** 每本书最后阅读位置（key=novelId）；继续阅读恢复滚动用 */
   lastReads: Record<string, LastRead>;
 }
@@ -44,6 +46,8 @@ const buildInitialState = (): ReaderState => ({
   fontFamily: FontFamily.MicrosoftYaHei,
   autoFetch: false,
   textAlign: TextAlign.left,
+  autoScroll: false,
+  autoScrollSpeed: 60,
   lastReads: {},
 });
 
@@ -91,6 +95,12 @@ export const ReaderSlice = createSlice({
     setAutoFetch(state, action: PayloadAction<boolean>) {
       state.autoFetch = action.payload;
     },
+    setAutoScroll(state, action: PayloadAction<boolean>) {
+      state.autoScroll = action.payload;
+    },
+    setAutoScrollSpeed(state, action: PayloadAction<number>) {
+      state.autoScrollSpeed = Math.min(300, Math.max(10, action.payload));
+    },
     setLastRead(
       state,
       action: PayloadAction<{
@@ -129,6 +139,11 @@ export const Reader = {
       (reader) => reader.speakPosition
     ),
     lastReads: createSelector(selectReader, (reader) => reader.lastReads),
+    autoScroll: createSelector(selectReader, (reader) => reader.autoScroll),
+    autoScrollSpeed: createSelector(
+      selectReader,
+      (reader) => reader.autoScrollSpeed
+    ),
   },
 };
 
@@ -139,6 +154,7 @@ const blacklist: Array<keyof ReaderState> = [
   // items to exclude from local storage
   'speaking',
   'speakPosition',
+  'autoScroll',
 ];
 
 export const readerPersistConfig: PersistConfig<ReaderState> = {

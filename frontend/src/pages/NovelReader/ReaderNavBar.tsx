@@ -6,6 +6,7 @@ import { Reader } from '@/store/_reader';
 import type { ReadChapter } from '@/types';
 import {
   BorderOutlined,
+  CaretDownOutlined,
   LeftOutlined,
   MinusOutlined,
   PlusOutlined,
@@ -30,6 +31,7 @@ export const ReaderNavBar: React.FC<{
   const speaking = useSelector(Reader.select.speaking);
   const position = useSelector(Reader.select.speakPosition);
   const fontSize = useSelector(Reader.select.fontSize);
+  const autoScroll = useSelector(Reader.select.autoScroll);
 
   const decreaseFontSize = () => {
     store.dispatch(Reader.action.setFontSize(fontSize - 1));
@@ -52,6 +54,8 @@ export const ReaderNavBar: React.FC<{
   };
 
   const startSpeaking = () => {
+    // 朗读与自动滚动互斥：开朗读先关滚动
+    store.dispatch(Reader.action.setAutoScroll(false));
     store.dispatch(Reader.action.setSpeaking(true));
     focusReaderPosition(Reader.select.speakPosition(store.getState()));
   };
@@ -132,6 +136,27 @@ export const ReaderNavBar: React.FC<{
         className={styles.item}
       >
         <PlusOutlined />
+      </div>
+
+      <div
+        aria-label="自动滚动"
+        role="button"
+        tabIndex={speaking ? -1 : 0}
+        aria-disabled={speaking}
+        onClick={() => {
+          if (!speaking) {
+            store.dispatch(Reader.action.setAutoScroll(!autoScroll));
+          }
+        }}
+        onKeyDown={handleActionKeyDown(() => {
+          if (!speaking) {
+            store.dispatch(Reader.action.setAutoScroll(!autoScroll));
+          }
+        })}
+        className={cx(styles.item, { [styles.disabled]: speaking })}
+      >
+        <CaretDownOutlined />
+        {md && ' 滚动'}
       </div>
 
       {data.content &&
