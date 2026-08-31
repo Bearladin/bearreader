@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 
 - **Cancelling any job of a multi-step request cancels the whole request** — Cancelling one volume of a 20-volume full-novel fetch used to leave the other 19 running; the cancel endpoint now climbs to the root job and tears down the entire tree, while standalone jobs still cancel alone.
+- **The chapter header shows only the title** — The "章节 x/y · 更新于 …" meta line is removed: TTS read it aloud every chapter and its relative time rendered in English; the count and timestamp stay visible on the novel details page.
 
 - **Reader controls no longer interfere with scrolling or TTS** — Main-keyboard and numpad font shortcuts work consistently, Space no longer reactivates a mouse-clicked toolbar action, chapter scroll saves do not reset speech, and chapter changes release old audio resources.
 - **Novel list results stay consistent with their filters** — Library search counts use the proper join without replacing the full shelf count, and stale catalog or library requests can no longer overwrite newer results.

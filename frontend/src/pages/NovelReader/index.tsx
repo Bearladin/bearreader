@@ -5,7 +5,6 @@ import { store } from '@/store';
 import { Reader } from '@/store/_reader';
 import { type Job, type ReadChapter } from '@/types';
 import { stringifyError } from '@/utils/errors';
-import { formatFromNow } from '@/utils/time';
 import { Button, Flex, Result, Spin } from 'antd';
 import axios from 'axios';
 import { LRUCache } from 'lru-cache';
@@ -22,15 +21,10 @@ const cache = new LRUCache<string, Promise<ReadChapter>>({ max: 1000 });
 async function fetchChapter(id: string) {
   const { data } = await axios.get<ReadChapter>(`/api/chapter/${id}/read`);
   if (data.content) {
+    // 仅保留章节标题；原"章节：x/y | 更新于 …"元信息行按用户要求移除
+    // （朗读会读出该行，且相对时间为英文）
     const header = renderToStaticMarkup(
-      <>
-        <h1 style={{ marginBottom: 6 }}>{data.chapter.title.trim()}</h1>
-        <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 25 }}>
-          章节：{data.chapter.serial} / {data.novel.chapter_count}
-          <span> | </span>
-          更新于 {formatFromNow(data.chapter.updated_at)}
-        </div>
-      </>
+      <h1 style={{ marginBottom: 25 }}>{data.chapter.title.trim()}</h1>
     );
     const clean = data.content.replace(
       /<p>(\s+)|(&nbsp;)+<\/p>(\n|\s|<br\/>)+/gim,
