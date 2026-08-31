@@ -5,7 +5,7 @@ from threading import Event
 import sqlmodel as sq
 
 from ...context import ctx
-from ...dao import Artifact, Job, JobStatus, User, UserActivity, UserToken
+from ...dao import Artifact, Job, User, UserActivity, UserToken
 from ...exceptions import AbortedException
 from ...utils.file_tools import folder_size, format_size
 from ...utils.time_utils import current_timestamp
@@ -125,12 +125,15 @@ class Scrubber:
     def delete_old_jobs(self):
         now = current_timestamp()
         with ctx.db.session() as sess:
-            # find root jobs to delete
+            # find root jobs to delete — finished ones only. Stuck jobs
+            # (e.g. killed mid-run by an older version) are handled by
+            # cancel_long_jobs first; including them here would crash the
+            # scrubber loop on the delete guard forever.
             job_ids = sess.exec(
                 sq.select(Job.id).where(
                     sq.col(Job.parent_job_id).is_(None),
-                    Job.status != JobStatus.PENDING,
-                    Job.updated_at < now - _day * 7,
+                    sq.col(Job.is_done).is_(True),
+                    sq.col(Job.updated_at) < now - _day * 7,
                 )
             ).all()
 
@@ -151,13 +154,16 @@ class Scrubber:
                 ctx.jobs.delete(job_id)
 
     def cancel_long_jobs(self):
+        # Any unfinished root job older than 16h is stuck — RUNNING ones
+        # from a dead runner, PAUSED ones abandoned by an older version.
+        # Cancel them all so the scrubber's delete pass can reap them.
         now = current_timestamp()
         with ctx.db.session() as sess:
             job_ids = sess.exec(
                 sq.select(Job.id).where(
                     sq.col(Job.parent_job_id).is_(None),
-                    Job.status == JobStatus.RUNNING,
-                    Job.updated_at < now - _hour * 16,
+                    sq.col(Job.is_done).is_(False),
+                    sq.col(Job.updated_at) < now - _hour * 16,
                 )
             ).all()
 
