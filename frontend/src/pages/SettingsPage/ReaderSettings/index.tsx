@@ -6,6 +6,7 @@ import { ReaderAutoScrollSpeedSettings } from './AutoScrollSpeedSettings';
 import { ReaderFontFamilySettings } from './FontFamilySettings';
 import { ReaderFontSizeSettings } from './FontSizeSettings';
 import { ReaderLineHeightSettings } from './LineHeightSettings';
+import { ReaderShortcutsSettings } from './ShortcutsSettings';
 import { ReaderTextAlignSettings } from './TextAlignSettings';
 import { ReaderThemeSettings } from './ThemeSettings';
 import { ReaderVoicePauseSettings } from './VoicePause';
@@ -23,6 +24,7 @@ const items: ReaderSettingsItem[] = [
   ReaderVoicePauseSettings,
   ReaderAutoScrollSpeedSettings,
   ReaderVoiceSpeedSettings,
+  ReaderShortcutsSettings,
   ReaderAutoFetchSetting,
 ];
 

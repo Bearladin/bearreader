@@ -47,7 +47,7 @@ const buildInitialState = (): ReaderState => ({
   autoFetch: false,
   textAlign: TextAlign.left,
   autoScroll: false,
-  autoScrollSpeed: 60,
+  autoScrollSpeed: 100,
   lastReads: {},
 });
 

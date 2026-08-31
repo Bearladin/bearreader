@@ -45,6 +45,13 @@
       opacity: 0.65;
     }
 
+    // 激活态（如自动滚动开启中）：加粗描边 + 背景轻染，一眼可辨开关状态
+    &.active {
+      opacity: 1;
+      background: rgba(128, 128, 128, 0.18);
+      box-shadow: inset 0 0 0 1.5px currentColor;
+    }
+
     &:hover:not(.disabled) {
       opacity: 1;
     }

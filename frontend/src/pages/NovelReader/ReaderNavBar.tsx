@@ -160,7 +160,10 @@ export const ReaderNavBar: React.FC<{
             store.dispatch(Reader.action.setAutoScroll(!autoScroll));
           }
         })}
-        className={cx(styles.item, { [styles.disabled]: speaking })}
+        className={cx(styles.item, {
+          [styles.disabled]: speaking,
+          [styles.active]: autoScroll,
+        })}
       >
         <CaretDownOutlined />
         {md && ' 滚动'}
