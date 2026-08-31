@@ -13,6 +13,36 @@ interface ChangeEntry {
 
 const entries: ChangeEntry[] = [
   {
+    version: '1.3.1',
+    date: '2026-08-31',
+    items: [
+      <span key="keyboard-shortcuts">
+        阅读器新增键盘快捷键：方向键切换章节（朗读中切换段落）、空格滚动一屏、S 开关朗读、+/− 调整字号，系统媒体键也可控制朗读；设置面板内新增快捷键速查。
+      </span>,
+      <span key="continuous-tts">
+        朗读支持跨章连读：读到章尾或手动切章时，自动从新章开头继续朗读。
+      </span>,
+      <span key="reading-resume">
+        阅读位置记忆：每本书记住最后读到的滚动位置，「继续阅读」直达原位置。
+      </span>,
+      <span key="auto-scroll">
+        新增自动滚动：可调速度匀速滚动，手动滚动即停；朗读时视图平滑跟随正在朗读的段落。
+      </span>,
+      <span key="catalog-sorting">
+        全库新增排序方式，书架内新增搜索与五种排序（更新、收录、章节数、书名）。
+      </span>,
+      <span key="cancel-whole-request">
+        取消多步任务（如获取全书）的任意一步，现在会取消整个请求，不再遗留其余分卷继续执行。
+      </span>,
+      <span key="chapter-header">
+        章节页头只保留标题：朗读不再读出章节序号与更新时间，阅读更沉浸。
+      </span>,
+      <span key="interaction-fixes">
+        修复键盘与工具栏交互干扰、书架搜索计数、列表快速切换时的结果竞态等多项问题；批量任务标题现在显示书名。
+      </span>,
+    ],
+  },
+  {
     version: '1.3.0',
     date: '2026-08-29',
     items: [
