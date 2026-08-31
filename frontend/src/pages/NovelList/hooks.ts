@@ -60,28 +60,43 @@ export function useNovelList() {
     domain: string,
     sort: string,
     page: number,
-    limit: number
+    limit: number,
+    signal: AbortSignal
   ) => {
     setError(undefined);
     try {
       const offset = (page - 1) * limit;
       const { data } = await axios.get<Paginated<Novel>>('/api/novels', {
         params: { search, offset, limit, domain, sort },
+        signal,
       });
       setTotal(data.total);
       setNovels(data.items);
     } catch (err: any) {
+      if (signal.aborted || axios.isCancel(err)) return;
       setError(stringifyError(err));
     } finally {
-      setLoading(false);
+      if (!signal.aborted) setLoading(false);
     }
   };
 
   useEffect(() => {
+    setLoading(true);
+    const controller = new AbortController();
     const tid = setTimeout(() => {
-      fetchNovels(search, domain, sort, currentPage, perPage);
+      void fetchNovels(
+        search,
+        domain,
+        sort,
+        currentPage,
+        perPage,
+        controller.signal
+      );
     }, 50);
-    return () => clearTimeout(tid);
+    return () => {
+      clearTimeout(tid);
+      controller.abort();
+    };
   }, [search, domain, sort, currentPage, perPage, refreshId]);
 
   const refresh = useCallback(() => {

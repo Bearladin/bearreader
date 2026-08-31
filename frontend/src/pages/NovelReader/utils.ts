@@ -14,3 +14,12 @@ export const focusReaderPosition = (position: number) => {
   });
   return () => cancelAnimationFrame(fid);
 };
+
+export const isReaderInteractiveTarget = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) return false;
+  return Boolean(
+    target.closest(
+      'input, textarea, select, button, a[href], [role="button"], [contenteditable="true"]'
+    )
+  );
+};

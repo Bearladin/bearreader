@@ -51,6 +51,7 @@ export const LibraryNovelList: React.FC<{
   useEffect(() => {
     setLoading(true);
     setError(undefined);
+    const controller = new AbortController();
     const loadNovels = async () => {
       try {
         const { data } = await axios.get<Paginated<Novel>>(
@@ -62,17 +63,20 @@ export const LibraryNovelList: React.FC<{
               search: search.trim(),
               sort,
             },
+            signal: controller.signal,
           }
         );
         setTotal(data.total);
         setNovels(data.items || []);
       } catch (err: any) {
+        if (controller.signal.aborted || axios.isCancel(err)) return;
         setError(stringifyError(err, '加载小说失败，请稍后重试。'));
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
-    loadNovels();
+    void loadNovels();
+    return () => controller.abort();
   }, [library.id, refresh, page, search, sort]);
 
   if (loading) {

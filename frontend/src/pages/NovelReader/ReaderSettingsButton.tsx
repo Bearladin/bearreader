@@ -21,10 +21,14 @@ export const ReaderSettingsButton: React.FC<
         aria-label={props['aria-label'] || '阅读设置'}
         role="button"
         tabIndex={0}
-        onClick={showSettings}
+        onClick={(event) => {
+          showSettings();
+          event.currentTarget.blur();
+        }}
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
+            event.stopPropagation();
             showSettings();
           }
         }}
