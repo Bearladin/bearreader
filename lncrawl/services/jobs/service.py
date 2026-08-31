@@ -139,6 +139,19 @@ class JobService:
             stmt = sq.select(Job).where(Job.parent_job_id == parent_job_id)
             return list(sess.exec(stmt).all())
 
+    def get_root_id(self, job_id: str) -> str:
+        """沿 parent_job_id 向上找到根任务；自身无父级时返回自身 id。
+
+        取消操作以根为对象：取消任何子任务意味着取消用户发起的整个请求。
+        """
+        with ctx.db.session() as sess:
+            current = job_id
+            while True:
+                parent_id = sess.scalar(sq.select(Job.parent_job_id).where(Job.id == current))
+                if parent_id is None:
+                    return current
+                current = parent_id
+
     def get_chapter_job(self, user_id: str, chapter_id: str) -> Optional[Job]:
         with ctx.db.session() as sess:
             return sess.exec(
