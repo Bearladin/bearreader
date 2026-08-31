@@ -292,18 +292,19 @@ class LibraryService:
             library = self._get_library(sess, library_id)
             self._ensure_visible(library, user)
 
-            cnt = (
-                sq.select(sq.func.count())
-                .select_from(LibraryNovel)
-                .where(LibraryNovel.library_id == library_id)
-            )
             stmt = sq.select(Novel).join(
                 LibraryNovel, sq.col(LibraryNovel.novel_id) == sq.col(Novel.id)
             )
+            cnt = (
+                sq.select(sq.func.count())
+                .select_from(Novel)
+                .join(LibraryNovel, sq.col(LibraryNovel.novel_id) == sq.col(Novel.id))
+            )
 
             conditions = []
-            if search.strip():
-                like = f"%{search.strip()}%"
+            normalized_search = search.strip()
+            if normalized_search:
+                like = f"%{normalized_search}%"
                 conditions.append(
                     sq.or_(
                         sq.col(Novel.title).ilike(like),
@@ -334,7 +335,7 @@ class LibraryService:
             modified = False
             extra = library.extra.copy()
 
-            if library.extra.get("novel_count") != total:
+            if not normalized_search and library.extra.get("novel_count") != total:
                 extra = library.extra.copy()
                 extra["novel_count"] = total
                 modified = True

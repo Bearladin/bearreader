@@ -83,7 +83,10 @@ export const ReaderContentsButton: React.FC<{
         }}
         icon={<UnorderedListOutlined />}
         loading={loading}
-        onClick={fetchChapters}
+        onClick={(event) => {
+          event.currentTarget.blur();
+          void fetchChapters();
+        }}
       >
         {md && '目录'}
       </Button>

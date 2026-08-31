@@ -9,12 +9,12 @@ import { formatFromNow } from '@/utils/time';
 import { Button, Flex, Result, Spin } from 'antd';
 import axios from 'axios';
 import { LRUCache } from 'lru-cache';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { useSelector } from 'react-redux';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ReaderVerticalLayout } from './ReaderVerticalLayout';
-import { focusReaderPosition } from './utils';
+import { focusReaderPosition, isReaderInteractiveTarget } from './utils';
 
 const fetchJobs = new LRUCache<string, Promise<Job>>({ max: 1000 });
 const cache = new LRUCache<string, Promise<ReadChapter>>({ max: 1000 });
@@ -75,13 +75,17 @@ export const NovelReaderPage: React.FC<any> = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const autoFetch = useSelector(Reader.select.autoFetch);
-  const lastReads = useSelector(Reader.select.lastReads);
+  const restoredChapterRef = useRef<string | undefined>(undefined);
 
   const [refreshId, setRefreshId] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [data, setData] = useState<ReadChapter>();
   const [job, setJob] = useState<Job>();
+  const chapterId = data?.chapter.id;
+  const chapterDone = data?.chapter.is_done;
+  const chapterContent = data?.content;
+  const novelId = data?.novel.id;
 
   // current chapter content data
   useEffect(() => {
@@ -89,6 +93,7 @@ export const NovelReaderPage: React.FC<any> = () => {
     // response overwrite the currently displayed chapter.
     let stale = false;
     if (id) {
+      setLoading(true);
       const fetchChapter = async () => {
         setError(undefined);
         try {
@@ -196,9 +201,7 @@ export const NovelReaderPage: React.FC<any> = () => {
         e.ctrlKey ||
         e.altKey ||
         e.metaKey ||
-        target?.tagName === 'INPUT' ||
-        target?.tagName === 'TEXTAREA' ||
-        target?.isContentEditable
+        isReaderInteractiveTarget(target)
       ) {
         return;
       }
@@ -218,6 +221,18 @@ export const NovelReaderPage: React.FC<any> = () => {
           const dest = forward ? data.next_id : data.previous_id;
           if (dest) navigate(`/read/${dest}`);
         }
+        return;
+      }
+      if (e.key === '+' || e.code === 'NumpadAdd') {
+        e.preventDefault();
+        const fontSize = Reader.select.fontSize(store.getState());
+        store.dispatch(Reader.action.setFontSize(fontSize + 1));
+        return;
+      }
+      if (e.key === '-' || e.code === 'NumpadSubtract') {
+        e.preventDefault();
+        const fontSize = Reader.select.fontSize(store.getState());
+        store.dispatch(Reader.action.setFontSize(fontSize - 1));
         return;
       }
       if (e.key === ' ') {
@@ -246,14 +261,25 @@ export const NovelReaderPage: React.FC<any> = () => {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [data, navigate]);
 
-  // Restore the saved scroll offset when reopening the same chapter,
-  // otherwise start at the top. Double-rAF waits for the content layout.
+  // Chapter-scoped state must change only when the chapter identity changes.
   useEffect(() => {
-    if (!data) return;
+    if (!chapterId) return;
+    restoredChapterRef.current = undefined;
+    store.dispatch(Reader.action.setSepakPosition(0));
+  }, [chapterId]);
 
-    const saved = lastReads[data.novel.id];
-    const target =
-      saved && saved.chapterId === data.chapter.id ? saved.offset : 0;
+  useEffect(() => {
+    if (
+      !chapterContent ||
+      !chapterId ||
+      !novelId ||
+      restoredChapterRef.current === chapterId
+    ) {
+      return;
+    }
+    restoredChapterRef.current = chapterId;
+    const saved = Reader.select.lastReads(store.getState())[novelId];
+    const target = saved && saved.chapterId === chapterId ? saved.offset : 0;
     let raf1 = 0;
     let raf2 = 0;
     raf1 = requestAnimationFrame(() => {
@@ -266,19 +292,17 @@ export const NovelReaderPage: React.FC<any> = () => {
       });
     });
 
-    // reset speaking position
-    store.dispatch(Reader.action.setSepakPosition(0));
-
-    // stop speaking if chapter is done
-    if (data && !data.content && data.chapter.is_done) {
-      store.dispatch(Reader.action.setSpeaking(false));
-    }
-
     return () => {
       cancelAnimationFrame(raf1);
       cancelAnimationFrame(raf2);
     };
-  }, [data, lastReads]);
+  }, [chapterContent, chapterId, novelId]);
+
+  useEffect(() => {
+    if (chapterId && !chapterContent && chapterDone) {
+      store.dispatch(Reader.action.setSpeaking(false));
+    }
+  }, [chapterContent, chapterDone, chapterId]);
 
   // Persist the reading offset (throttled) so "continue reading" reopens
   // at the same spot. Only the currently opened chapter writes history.
@@ -305,7 +329,7 @@ export const NovelReaderPage: React.FC<any> = () => {
     return () => window.removeEventListener('scroll', onScroll);
   }, [data]);
 
-  if (loading) {
+  if (loading || (!error && id && data && data.chapter.id !== id)) {
     return (
       <Flex
         align="center"

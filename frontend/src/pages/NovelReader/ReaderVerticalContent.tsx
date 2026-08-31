@@ -16,6 +16,11 @@ const DEFAULT_VOICE = 'zh-CN-XiaoxiaoNeural';
 const PREFETCH_AHEAD = 3; // 预取后续段落数（边合成边播的缓冲）
 const MAX_CACHE_URLS = 240; // 音频 Blob URL 上限，超出 revoke 最早的防止泄漏
 
+interface ActivePlayer {
+  audio: HTMLAudioElement;
+  finish: () => void;
+}
+
 /**
  * Edge-TTS 在线朗读引擎（v1.1.8）。
  *
@@ -37,7 +42,8 @@ function useEdgeTtsSpeech(
 
   const audioCache = useRef(new Map<number, string>()); // 段序号 -> Blob URL
   const inflightAudios = useRef(new Map<number, Promise<string>>());
-  const playerRef = useRef<HTMLAudioElement | null>(null);
+  const playerRef = useRef<ActivePlayer | null>(null);
+  const abortControllerRef = useRef(new AbortController());
   // true once the reading session ends; a synthesize that finishes LATE must
   // not publish its Blob URL into the cache (resource leak) and its URL is
   // revoked immediately.
@@ -60,7 +66,10 @@ function useEdgeTtsSpeech(
         const { data: blob } = await axios.post<Blob>(
           '/api/tts/synthesize',
           { sentence: text, voice: effectiveVoice, rate: voiceSpeed },
-          { responseType: 'blob' }
+          {
+            responseType: 'blob',
+            signal: abortControllerRef.current.signal,
+          }
         );
         const url = URL.createObjectURL(blob);
         if (stoppedRef.current) {
@@ -84,47 +93,85 @@ function useEdgeTtsSpeech(
       try {
         return await promise;
       } finally {
-        inflightAudios.current.delete(idx);
+        if (inflightAudios.current.get(idx) === promise) {
+          inflightAudios.current.delete(idx);
+        }
       }
     },
     [contentEl, effectiveVoice, voiceSpeed]
   );
 
+  const stopPlayer = useCallback(() => {
+    const active = playerRef.current;
+    if (!active) return;
+    active.finish();
+    active.audio.pause();
+    active.audio.removeAttribute('src');
+    active.audio.load();
+  }, []);
+
   const playUrl = useCallback(
     (url: string): Promise<void> =>
-      new Promise((resolve) => {
+      new Promise((resolve, reject) => {
+        stopPlayer();
         const audio = new Audio(url);
-        playerRef.current = audio;
-        audio.onended = () => {
-          playerRef.current = null;
-          resolve();
+        let settled = false;
+        const finish = (error?: Error) => {
+          if (settled) return;
+          settled = true;
+          audio.onended = null;
+          audio.onerror = null;
+          if (playerRef.current?.audio === audio) {
+            playerRef.current = null;
+          }
+          if (error) {
+            reject(error);
+          } else {
+            resolve();
+          }
         };
-        audio.onerror = () => {
-          playerRef.current = null;
-          resolve();
-        };
-        void audio.play().catch(() => {
-          playerRef.current = null;
-          resolve();
-        });
+        playerRef.current = { audio, finish };
+        audio.onended = () => finish();
+        audio.onerror = () => finish(new Error('语音播放失败，请检查系统音频设置'));
+        void audio
+          .play()
+          .catch(() => finish(new Error('语音播放失败，请检查系统音频设置')));
       }),
-    []
+    [stopPlayer]
   );
 
-  // 停止时清理播放器与音频缓存
-  useEffect(() => {
-    if (speaking) return;
+  const clearAudioResources = useCallback((renewController: boolean) => {
     stoppedRef.current = true;
-    if (playerRef.current) {
-      playerRef.current.pause();
-      playerRef.current = null;
+    abortControllerRef.current.abort();
+    if (renewController) {
+      abortControllerRef.current = new AbortController();
     }
+    stopPlayer();
     for (const url of audioCache.current.values()) {
       URL.revokeObjectURL(url);
     }
     audioCache.current.clear();
     inflightAudios.current.clear();
-  }, [speaking]);
+  }, [stopPlayer]);
+
+  // 停止时清理播放器与音频缓存，并为同章再次朗读准备新请求。
+  useEffect(() => {
+    if (speaking) {
+      stoppedRef.current = false;
+      if (abortControllerRef.current.signal.aborted) {
+        abortControllerRef.current = new AbortController();
+      }
+      return;
+    }
+    clearAudioResources(true);
+  }, [speaking, clearAudioResources]);
+
+  useEffect(
+    () => () => {
+      clearAudioResources(false);
+    },
+    [clearAudioResources]
+  );
 
   // MediaSession: system media keys and the OS media flyout control TTS,
   // so playback can be toggled while the window is minimized.
@@ -227,6 +274,7 @@ function useEdgeTtsSpeech(
         if (cancelled) return;
         store.dispatch(Reader.action.setSepakPosition(position + 1));
       } catch (err) {
+        if (cancelled || axios.isCancel(err)) return;
         message.error(
           err instanceof Error && err.message
             ? err.message
@@ -241,10 +289,7 @@ function useEdgeTtsSpeech(
     return () => {
       cancelled = true;
       if (tid) clearTimeout(tid);
-      if (playerRef.current) {
-        playerRef.current.pause();
-        playerRef.current = null;
-      }
+      stopPlayer();
     };
   }, [
     speaking,
@@ -254,6 +299,7 @@ function useEdgeTtsSpeech(
     voicePause,
     ensureAudio,
     playUrl,
+    stopPlayer,
     navigate,
   ]);
 }

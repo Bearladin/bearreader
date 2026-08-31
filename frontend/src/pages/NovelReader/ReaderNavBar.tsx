@@ -84,8 +84,15 @@ export const ReaderNavBar: React.FC<{
     (action: () => void) => (event: React.KeyboardEvent<HTMLDivElement>) => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
+        event.stopPropagation();
         action();
       }
+    };
+
+  const handleActionClick =
+    (action: () => void) => (event: React.MouseEvent<HTMLDivElement>) => {
+      action();
+      event.currentTarget.blur();
     };
 
   return (
@@ -106,7 +113,7 @@ export const ReaderNavBar: React.FC<{
         aria-label="上一章"
         role="button"
         tabIndex={data.previous_id ? 0 : -1}
-        onClick={goPrevious}
+        onClick={handleActionClick(goPrevious)}
         onKeyDown={handleActionKeyDown(goPrevious)}
         className={cx(styles.item, {
           [styles.disabled]: !data.previous_id,
@@ -120,7 +127,7 @@ export const ReaderNavBar: React.FC<{
         aria-label="减小字号"
         role="button"
         tabIndex={0}
-        onClick={decreaseFontSize}
+        onClick={handleActionClick(decreaseFontSize)}
         onKeyDown={handleActionKeyDown(decreaseFontSize)}
         className={styles.item}
       >
@@ -131,7 +138,7 @@ export const ReaderNavBar: React.FC<{
         aria-label="增大字号"
         role="button"
         tabIndex={0}
-        onClick={increaseFontSize}
+        onClick={handleActionClick(increaseFontSize)}
         onKeyDown={handleActionKeyDown(increaseFontSize)}
         className={styles.item}
       >
@@ -143,11 +150,11 @@ export const ReaderNavBar: React.FC<{
         role="button"
         tabIndex={speaking ? -1 : 0}
         aria-disabled={speaking}
-        onClick={() => {
+        onClick={handleActionClick(() => {
           if (!speaking) {
             store.dispatch(Reader.action.setAutoScroll(!autoScroll));
           }
-        }}
+        })}
         onKeyDown={handleActionKeyDown(() => {
           if (!speaking) {
             store.dispatch(Reader.action.setAutoScroll(!autoScroll));
@@ -166,7 +173,7 @@ export const ReaderNavBar: React.FC<{
               aria-label="上一段"
               role="button"
               tabIndex={0}
-              onClick={moveBackward}
+              onClick={handleActionClick(moveBackward)}
               onKeyDown={handleActionKeyDown(moveBackward)}
               className={styles.item}
             >
@@ -178,7 +185,7 @@ export const ReaderNavBar: React.FC<{
               role="button"
               tabIndex={0}
               className={styles.item}
-              onClick={stopSpeaking}
+              onClick={handleActionClick(stopSpeaking)}
               onKeyDown={handleActionKeyDown(stopSpeaking)}
             >
               <BorderOutlined />
@@ -189,7 +196,7 @@ export const ReaderNavBar: React.FC<{
               role="button"
               tabIndex={0}
               className={styles.item}
-              onClick={moveForward}
+              onClick={handleActionClick(moveForward)}
               onKeyDown={handleActionKeyDown(moveForward)}
             >
               <StepForwardOutlined />
@@ -202,7 +209,7 @@ export const ReaderNavBar: React.FC<{
             role="button"
             tabIndex={0}
             className={styles.item}
-            onClick={startSpeaking}
+            onClick={handleActionClick(startSpeaking)}
             onKeyDown={handleActionKeyDown(startSpeaking)}
           >
             <SoundOutlined />
@@ -221,7 +228,7 @@ export const ReaderNavBar: React.FC<{
         aria-label="下一章"
         role="button"
         tabIndex={data.next_id ? 0 : -1}
-        onClick={goNext}
+        onClick={handleActionClick(goNext)}
         onKeyDown={handleActionKeyDown(goNext)}
         className={cx(styles.item, {
           [styles.disabled]: !data.next_id,
