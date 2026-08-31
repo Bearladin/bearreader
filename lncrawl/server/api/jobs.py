@@ -93,8 +93,15 @@ def cancel_job(
     job_id: str = Path(),
 ) -> bool:
     ctx.jobs.verify_access(user, job_id)
-    ctx.scheduler.stop_job(job_id)
-    ctx.jobs.cancel(job_id)
+    # Cancelling any job of a multi-step request cancels the whole request:
+    # climb to the root so every descendant (e.g. all 20 volumes of a
+    # full-novel fetch) is torn down together. A standalone job is its own
+    # root and cancels alone.
+    root_id = ctx.jobs.get_root_id(job_id)
+    if root_id != job_id:
+        ctx.jobs.verify_access(user, root_id)
+    ctx.scheduler.stop_job(root_id)
+    ctx.jobs.cancel(root_id)
     return True
 
 
