@@ -109,6 +109,8 @@ const technicalTokens = [
   'favicon',
   'BearReader',
   'BearReader.exe',
+  // 构建钩子注入窗口标题的模板片段（技术构造，非界面文案）
+  '<title>BearReader v',
   'backendtool.exe',
   'xbanxia',
   'display-mode: standalone',

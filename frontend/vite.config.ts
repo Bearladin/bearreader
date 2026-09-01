@@ -39,6 +39,17 @@ export default defineConfig({
     },
   },
   plugins: [
+    {
+      // 窗口标题栏的版本号同样来自 lncrawl/VERSION：index.html 的 <title> 是
+      // 静态文本，define 只注入 JS 模块，需要这个钩子在构建时改写 title。
+      name: 'inject-app-version-into-title',
+      transformIndexHtml(html) {
+        return html.replace(
+          /<title>.*<\/title>/,
+          `<title>BearReader v${APP_VERSION}</title>`,
+        );
+      },
+    },
     react(),
     tsconfigPaths(),
     VitePWA({
