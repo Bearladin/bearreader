@@ -10,12 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - **A close confirmation before the app window shuts** — Clicking X or Alt+F4 in app mode first asks the browser's leave-confirmation dialog, so an accidental click cannot kill a running reading or download session; a "关闭时确认" switch in the reader settings (on by default) turns it off. The service worker's self-reload on updates stays silent — it is lossless and must not ask.
 - **The app-mode browser no longer bloats the data directory** — The window is an Edge app profile that used to accumulate hundreds of MB of wallet/shopping/visual-search components and update caches inside the app data folder; launch flags now disable those side components while keeping rendering, cookies, sessions and Safe Browsing untouched.
+- **本地 EPUB 导入** — “全部小说”支持拖拽或文件选择导入单个 EPUB，导入前可预览并编辑书名/作者；有封面时提取保存，无封面时使用动态占位封面，完成后直接打开小说详情。
 
 ### Fixed
 
 - **The desktop launcher no longer lingers as a zombie process** — When every exit signal misfires at once (window handed to an untracked process, title probe hitting a foreign window, bye beacon lost), the keep-alive loop used to wait forever while holding the single-instance lock; it now winds down after 2 minutes without a window sighting and records a diagnostic, so a relaunch after an unclean close recovers quickly.
 - **"Already running" is now visible instead of a silent exit** — When the single-instance lock stays held after the takeover wait, a self-dismissing message box tells the user to end the leftover processes instead of double-clicking doing nothing.
 - **A damaged legacy database no longer breaks the whole source list** — The per-domain novel count is decorative; when its query fails, sources still load without counts and the failure is logged, instead of failing the entire endpoint (previously required wiping the data directory).
+- **EPUB 导入失败与取消状态保持一致** — 状态更新采用条件迁移，提交目标可从中断中恢复，过期会话和孤儿文件会被清理，内部导入任务不能被通用重放或误取消。
+- **An empty source registry can no longer masquerade as a healthy startup** — A damaged or quarantined source bundle now fails before replacing the active registry, reload failures keep the previous sources live, and the health endpoint reports loaded crawler and domain counts.
 - **Windows startup now uses UTF-8 and preserves failure diagnostics** — Both bundled executables enable Python's UTF-8 mode before interpreter startup, while desktop launch failures and missing browser windows write a bounded UTF-8 log under the application data directory for troubleshooting paths on any Windows locale.
 - **The job scrubber no longer crashes on stuck legacy jobs** — A root job left unfinished by an older version (e.g. killed mid-run) crashed the background scrubber loop forever with "Only finished jobs can be deleted", halting every cleanup duty; the delete pass now selects finished jobs only, and stuck jobs of any state are cancelled after 16 hours so they get reaped on the next pass.
 

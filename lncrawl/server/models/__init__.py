@@ -19,6 +19,13 @@ if TYPE_CHECKING:
         FeedbackUpdateRequest,
     )
     from .history import ContinueReadingResponse, ReadHistoryNovel
+    from .imports import (
+        EpubImportCommitRequest,
+        EpubImportPreview,
+        EpubImportSample,
+        EpubImportSessionResponse,
+        EpubImportStartResponse,
+    )
     from .job import (
         FetchChaptersRequest,
         FetchImagesRequest,
@@ -100,6 +107,12 @@ __all__ = [
     "LibraryItem",
     # novel
     "ReadChapterResponse",
+    # imports
+    "EpubImportCommitRequest",
+    "EpubImportPreview",
+    "EpubImportSample",
+    "EpubImportSessionResponse",
+    "EpubImportStartResponse",
     # pagination
     "Paginated",
     # user
@@ -156,6 +169,11 @@ _LAZY: dict[str, str] = {
     "LibraryItem": ".library",
     "LibraryUpdateRequest": ".library",
     "ReadChapterResponse": ".novel",
+    "EpubImportCommitRequest": ".imports",
+    "EpubImportPreview": ".imports",
+    "EpubImportSample": ".imports",
+    "EpubImportSessionResponse": ".imports",
+    "EpubImportStartResponse": ".imports",
     "Paginated": ".pagination",
     "AppInfo": ".sources",
     "CrawlerIndex": ".sources",

@@ -41,7 +41,7 @@ class NovelService:
             conditions: List[Any] = []
 
             if domain:
-                conditions.append(sq.col(Novel.url).ilike(f"%{domain}%"))
+                conditions.append(sq.col(Novel.domain).ilike(f"%{domain}%"))
 
             if search:
                 conditions.append(

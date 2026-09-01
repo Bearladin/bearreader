@@ -44,6 +44,7 @@ const uiPropertyNames = new Set([
 
 const technicalTokens = [
   'API',
+  'application/epub+zip',
   'Argon2id',
   'ArrowLeft',
   'ArrowRight',
@@ -70,6 +71,7 @@ const technicalTokens = [
   'IP',
   'JSON',
   'Kindle',
+  'MB',
   'LIT',
   'LRF',
   'MOBI',
@@ -78,6 +80,7 @@ const technicalTokens = [
   'NumpadSubtract',
   'PDB',
   'PDF',
+  '.epub',
   'PWA',
   'OAuth',
   'Python',

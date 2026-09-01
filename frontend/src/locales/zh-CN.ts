@@ -53,6 +53,8 @@ export const enumLabels = {
     [JobType.SEARCH_ALL_SOURCES]: '全源搜索',
     [JobType.FETCH_MISSING]: '补全缺失章节',
     [JobType.FETCH_LATEST]: '检查更新并补全',
+    [JobType.IMPORT_EPUB_ANALYZE]: '分析 EPUB',
+    [JobType.IMPORT_EPUB_COMMIT]: '导入 EPUB',
     [JobType.NOVEL_TRANSLATION]: '翻译小说',
     [JobType.NOVEL_TRANSLATION_BATCH]: '批量翻译小说',
     [JobType.FULL_NOVEL_TRANSLATION]: '翻译完整小说',

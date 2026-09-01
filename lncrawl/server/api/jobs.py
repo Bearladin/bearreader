@@ -93,6 +93,10 @@ def cancel_job(
     job_id: str = Path(),
 ) -> bool:
     ctx.jobs.verify_access(user, job_id)
+    job = ctx.jobs.get(job_id)
+    if job.type in (JobType.IMPORT_EPUB_ANALYZE, JobType.IMPORT_EPUB_COMMIT):
+        ctx.epub_import.cancel_for_job(job_id, user)
+        return True
     # Cancelling any job of a multi-step request cancels the whole request:
     # climb to the root so every descendant (e.g. all 20 volumes of a
     # full-novel fetch) is torn down together. A standalone job is its own
@@ -110,7 +114,10 @@ def replay_job(
     user: User = Security(ensure_user),
     job_id: str = Path(),
 ) -> Job:
+    ctx.jobs.verify_access(user, job_id)
     job = ctx.jobs.get(job_id)
+    if job.type in (JobType.IMPORT_EPUB_ANALYZE, JobType.IMPORT_EPUB_COMMIT):
+        raise ServerErrors.invalid_input.with_extra("EPUB 导入任务不能重放")
     data = dict(**job.extra)
     if job.type in (JobType.SEARCH_ALL_SOURCES, JobType.SEARCH_SOURCE):
         data["search_results"] = []

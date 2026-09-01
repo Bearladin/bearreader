@@ -68,6 +68,12 @@ class __AppContext__:
         return FileService()
 
     @cached_property
+    def epub_import(self):
+        from .services.epub_import import EpubImportService
+
+        return EpubImportService()
+
+    @cached_property
     def scraper(self):
         from .services.scraper import ScraperService
 

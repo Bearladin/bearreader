@@ -60,6 +60,8 @@ def list_sources() -> Dict[str, int]:
     # 只保留当前书源索引支持的域名：测试期入库的旧书源书（如 chuangshi/readnovel）
     # 仍留在数据库里，但不应再出现在筛选下拉框。
     supported = {source.domain for source in ctx.sources.list(include_rejected=False)}
+    if "本地导入" in domains:
+        supported.add("本地导入")
     return {domain: count for domain, count in domains.items() if domain in supported}
 
 

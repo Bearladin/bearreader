@@ -38,6 +38,12 @@ _DOMAIN_JOB_TYPES = frozenset(
         JobType.SEARCH_SOURCE,
     }
 )
+_INTERNAL_JOB_TYPES = frozenset(
+    {
+        JobType.IMPORT_EPUB_ANALYZE,
+        JobType.IMPORT_EPUB_COMMIT,
+    }
+)
 
 
 class JobService:
@@ -55,6 +61,7 @@ class JobService:
         status: Optional[JobStatus] = None,
         is_done: Optional[bool] = None,
         parent_job_id: Optional[str] = None,
+        include_internal: bool = False,
     ) -> Paginated[Job]:
         with ctx.db.session() as sess:
             stmt = sq.select(Job)
@@ -81,6 +88,8 @@ class JobService:
                         sq.col(Job.parent_job_id).is_(None),
                     )
                 )
+            if not include_internal:
+                conditions.append(sq.col(Job.type).not_in(_INTERNAL_JOB_TYPES))
 
             if conditions:
                 stmt = stmt.where(*conditions)
@@ -215,6 +224,41 @@ class JobService:
             parent_id=parent_id,
             depends_on=depends_on,
             type=JobType.FULL_NOVEL if full else JobType.NOVEL,
+        )
+
+    def import_epub_analysis(
+        self,
+        user: User,
+        session_id: str,
+        original_name: str,
+    ) -> Job:
+        return self._create(
+            user=user,
+            data={
+                "import_session_id": session_id,
+                "original_name": original_name,
+                "phase": "准备分析",
+            },
+            type=JobType.IMPORT_EPUB_ANALYZE,
+            total=5,
+        )
+
+    def import_epub_commit(
+        self,
+        user: User,
+        session_id: str,
+        title: str,
+        authors: str,
+    ) -> Job:
+        return self._create(
+            user=user,
+            data={
+                "import_session_id": session_id,
+                "novel_title": title,
+                "authors": authors,
+                "phase": "准备导入",
+            },
+            type=JobType.IMPORT_EPUB_COMMIT,
         )
 
     def fetch_many_novels(
@@ -795,18 +839,26 @@ class JobService:
 
     def cancel(self, job_id: str) -> None:
         with ctx.db.session() as sess:
-            self._cancel_down(sess, job_id, True)
-            self._fail(
-                sess,
-                job_id,
-                reason="因关联任务取消而结束",
+            job = sess.get(Job, job_id)
+            if job is None or job.is_done:
+                return
+            result = sess.exec(
+                sq.update(Job)
+                .where(
+                    sq.col(Job.id) == job_id,
+                    sq.col(Job.is_done).is_(False),
+                )
+                .values(
+                    is_done=True,
+                    status=JobStatus.CANCELED,
+                    error="任务已取消",
+                    started_at=sq.func.coalesce(Job.started_at, current_timestamp()),
+                    finished_at=current_timestamp(),
+                )
             )
-            self._update(
-                sess,
-                job_id,
-                error="任务已取消",
-                status=JobStatus.CANCELED,
-            )
+            if result.rowcount != 1:
+                return
+            self._cancel_down(sess, job_id, False)
             sess.commit()
 
     # -------------------------------------------------------------------------
@@ -876,7 +928,10 @@ class JobService:
         data: dict,
         parent_id: Optional[str] = None,
         depends_on: Optional[str] = None,
+        total: int = 1,
     ) -> Job:
+        if total < 1:
+            raise ValueError("Job total must be positive")
         with ctx.db.session() as sess:
             if parent_id is None:
                 self._ensure_user_access_limit(sess, user)
@@ -889,13 +944,14 @@ class JobService:
                 parent_job_id=parent_id,
                 priority=ctx.tier.job_priority(user),
                 domain=self._resolve_domain(type, data),
+                total=total,
             )
             sess.add(job)
 
             self._update_up(
                 sess,
                 job.id,
-                total=Job.total + 1,
+                total=Job.total + total,
             )
 
             sess.commit()

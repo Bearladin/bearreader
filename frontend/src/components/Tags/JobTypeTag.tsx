@@ -4,6 +4,7 @@ import {
   AppstoreOutlined,
   BookOutlined,
   CloudDownloadOutlined,
+  CloudUploadOutlined,
   FileTextOutlined,
   FolderOutlined,
   PictureOutlined,
@@ -60,6 +61,10 @@ export const JobTypeTag: React.FC<{ value: JobType }> = ({ value }) => {
       return single(<CloudDownloadOutlined />, enumLabels.jobType[value]);
     case JobType.FETCH_LATEST:
       return single(<SyncOutlined />, enumLabels.jobType[value]);
+    case JobType.IMPORT_EPUB_ANALYZE:
+      return single(<CloudUploadOutlined />, enumLabels.jobType[value]);
+    case JobType.IMPORT_EPUB_COMMIT:
+      return single(<CloudUploadOutlined />, enumLabels.jobType[value]);
     default:
       return <Tag>{String(value)}</Tag>;
   }

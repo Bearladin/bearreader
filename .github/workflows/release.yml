@@ -93,6 +93,7 @@ jobs:
           Invoke-Native uv run python scripts\build_distribution_sources.py --output build\distribution-sources
           Invoke-Native uv run python scripts\verify_distribution_sources.py build\distribution-sources
           Invoke-Native uv run python scripts\verify_distribution_runtime.py
+          Invoke-Native uv run python scripts\verify_epub_import.py
           Invoke-Native uv run python scripts\verify_distribution_hardening.py
           Invoke-Native uv run python scripts\verify_startup_diagnostics.py
           Invoke-Native uv run python scripts\verify_workflow_safety.py
