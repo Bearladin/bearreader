@@ -131,7 +131,11 @@ export const EpubImportModal: React.FC<{
       return Upload.LIST_IGNORE;
     }
     setError(undefined);
-    setUploadFile(file);
+    setUploadFile({
+      uid: file.uid,
+      name: file.name,
+      originFileObj: file,
+    });
     return false;
   };
 
