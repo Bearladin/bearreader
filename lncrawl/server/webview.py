@@ -295,6 +295,14 @@ def _launch_app_window(url: str, manage_console: bool) -> None:
             # 标题栏跟随系统深色模式时会显示为黑色；强制浅色外观，
             # 与应用内 iOS 浅色主题观感统一（原生标题栏无法直接设为品牌蓝）。
             "--force-light-mode",
+            # 应用模式窗口用不到 Edge 的旁路功能；这些组件/更新缓存在
+            # --user-data-dir 里能积累到数百 MB，让应用数据目录严重虚胖。
+            # 只禁旁路组件（钱包/购物/视觉搜索模型/组件更新缓存），
+            # 页面渲染、Cookie、登录态、Safe Browsing 均不受影响；
+            # 这些开关若被未来 Edge 版本忽略，后果只是体积回升，功能无损。
+            "--disable-features=msEdgeWallet,msShoppingAssistant,msEntityExtraction,ComponentUpdates",
+            "--disable-component-update",
+            "--disable-background-networking",
         ]
         try:
             logger.info(f"Opening app-mode browser: {binary}")
@@ -487,8 +495,10 @@ def _keep_alive(
     # probing finds a same-named foreign window, the bye beacon never
     # arrives). The loop must never hang forever holding the single-instance
     # mutex — after this long without a window sighting, wind down and let
-    # the diagnostic tell the user what happened.
-    ZOMBIE_AFTER = 10 * 60.0
+    # the diagnostic tell the user what happened. 2 minutes is long enough
+    # to ride out a temporarily hung window (IsHungAppWindow skips those),
+    # and short enough that "closed, then relaunched" recovers quickly.
+    ZOMBIE_AFTER = 2 * 60.0
     zombie_logged = False
 
     def _browser_alive() -> bool:
