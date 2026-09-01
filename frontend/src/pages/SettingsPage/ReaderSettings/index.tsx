@@ -3,6 +3,7 @@ import type { ReaderSettingsItem } from './types';
 import { Descriptions, Flex, Grid } from 'antd';
 import { ReaderAutoFetchSetting } from './AutoFetchSetting';
 import { ReaderAutoScrollSpeedSettings } from './AutoScrollSpeedSettings';
+import { ReaderConfirmOnCloseSettings } from './ConfirmOnCloseSettings';
 import { ReaderFontFamilySettings } from './FontFamilySettings';
 import { ReaderFontSizeSettings } from './FontSizeSettings';
 import { ReaderLineHeightSettings } from './LineHeightSettings';
@@ -25,6 +26,7 @@ const items: ReaderSettingsItem[] = [
   ReaderAutoScrollSpeedSettings,
   ReaderVoiceSpeedSettings,
   ReaderShortcutsSettings,
+  ReaderConfirmOnCloseSettings,
   ReaderAutoFetchSetting,
 ];
 
