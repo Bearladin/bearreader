@@ -2,7 +2,7 @@ from typing import Dict, Type
 
 from ...context import ctx
 from ...core import TaskManager
-from ...dao import Job, NotificationItem, User
+from ...dao import Job, JobType, NotificationItem, User
 from ._base import MailNotification
 from .artifact_success import ArtifactSuccessMail
 from .job_canceled import JobCanceledMail
@@ -40,7 +40,10 @@ class JobNotificationService:
         ``email_sent`` bookkeeping. Hands delivery to a background worker so that the job
         runner is never blocked.
         """
-        if not user.is_verified:
+        if not user.is_verified or job.type in (
+            JobType.IMPORT_EPUB_ANALYZE,
+            JobType.IMPORT_EPUB_COMMIT,
+        ):
             return
 
         # ensure this is root job, as email_sent is tracked only on the root

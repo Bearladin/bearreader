@@ -13,6 +13,7 @@ from .fetch_latest import FetchLatestHandler
 from .fetch_missing import FetchMissingHandler
 from .image import ImageHandler
 from .image_batch import ImageBatchHandler
+from .import_epub import EpubAnalyzeHandler, EpubCommitHandler
 from .novel import NovelHandler
 from .novel_batch import NovelBatchHandler
 from .novel_translation import NovelTranslationHandler
@@ -42,6 +43,8 @@ _HANDLER_REGISTRY: List[Type[BaseHandler]] = [
     ChapterTranslationBatchHandler,
     ImageHandler,
     ImageBatchHandler,
+    EpubAnalyzeHandler,
+    EpubCommitHandler,
     ArtifactHandler,
     ArtifactBatchHandler,
     SearchAllSourcesHandler,

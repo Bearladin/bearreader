@@ -1,10 +1,11 @@
 import FallbackImage from '@/assets/no-image.svg';
 import { API_BASE_URL } from '@/config';
+import { ImportedCover } from '@/components/ImportedCover';
 import { Auth } from '@/store/_auth';
 import type { Novel } from '@/types';
 import { getGradientForId } from '@/utils/gradients';
 import { formatDate } from '@/utils/time';
-import { ExportOutlined } from '@ant-design/icons';
+import { BookOutlined, ExportOutlined } from '@ant-design/icons';
 import {
   Card,
   Descriptions,
@@ -46,7 +47,11 @@ export const NovelDetailsCard: React.FC<{
       title={
         <Flex vertical>
           <Space size="small">
-            <Favicon url={novel.url} />
+            {novel.extra.imported ? (
+              <BookOutlined />
+            ) : (
+              <Favicon url={novel.url} />
+            )}
             <Typography.Text type="secondary" style={{ fontSize: '18px' }}>
               {novel.domain}
             </Typography.Text>
@@ -61,34 +66,49 @@ export const NovelDetailsCard: React.FC<{
         </Flex>
       }
       extra={
-        <Tooltip title="原始书源">
-          <Typography.Link
-            href={novel.url}
-            target="_blank"
-            rel="noreferrer noopener"
-            style={{ fontSize: '24px' }}
-          >
-            <ExportOutlined />
-          </Typography.Link>
-        </Tooltip>
+        !novel.extra.imported && (
+          <Tooltip title="原始书源">
+            <Typography.Link
+              href={novel.url}
+              target="_blank"
+              rel="noreferrer noopener"
+              style={{ fontSize: '24px' }}
+            >
+              <ExportOutlined />
+            </Typography.Link>
+          </Tooltip>
+        )
       }
     >
       <Flex gap="20px" vertical={!lg}>
         <Flex vertical align="center" justify="flex-start" gap="5px">
-          <Image
-            alt="小说封面"
-            src={`${API_BASE_URL}/static/${novel.cover_file}?token=${token}`}
-            fallback={FallbackImage}
-            style={{
-              display: 'block',
-              objectFit: 'cover',
-              borderRadius: 2,
-              width: 'auto',
-              maxWidth: '225px',
-              height: '300px',
-              background: getGradientForId(novel.id, 'dark'),
-            }}
-          />
+          {novel.extra.imported && !novel.cover_available ? (
+            <ImportedCover
+              novel={novel}
+              style={{
+                display: 'flex',
+                width: 'auto',
+                maxWidth: '225px',
+                height: '300px',
+                borderRadius: 2,
+              }}
+            />
+          ) : (
+            <Image
+              alt="小说封面"
+              src={`${API_BASE_URL}/static/${novel.cover_file}?token=${token}`}
+              fallback={FallbackImage}
+              style={{
+                display: 'block',
+                objectFit: 'cover',
+                borderRadius: 2,
+                width: 'auto',
+                maxWidth: '225px',
+                height: '300px',
+                background: getGradientForId(novel.id, 'dark'),
+              }}
+            />
+          )}
         </Flex>
         <Flex vertical flex="auto" gap="5px">
           <Descriptions

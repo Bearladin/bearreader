@@ -1,8 +1,10 @@
 import { AddToLibraryButton } from '@/components/Library/AddToLibraryButton';
+import { EpubImportModal } from '@/components/EpubImportModal';
 import { ErrorState } from '@/components/Loading/ErrorState';
-import { AppstoreOutlined, UnorderedListOutlined } from '@ant-design/icons';
-import { Col, Empty, Flex, Pagination, Row, Segmented, Skeleton, Typography } from 'antd';
-import { useState } from 'react';
+import { AppstoreOutlined, UnorderedListOutlined, UploadOutlined } from '@ant-design/icons';
+import { Button, Col, Empty, Flex, Pagination, Row, Segmented, Skeleton, Typography } from 'antd';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useNovelList } from './hooks';
 import { NovelFilterBox } from './NovelFilterBox';
 import { NovelListItemCard } from './NovelListItemCard';
@@ -51,6 +53,9 @@ export const NovelListPage: React.FC<any> = () => {
   const [view, setView] = useState<'list' | 'grid'>(() =>
     localStorage.getItem('bearreader/novels/view') === 'grid' ? 'grid' : 'list'
   );
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [importOpen, setImportOpen] = useState(false);
+  const highlightedNovelId = searchParams.get('highlight');
   const {
     search: initialSearch,
     domain: initialDomain,
@@ -64,6 +69,18 @@ export const NovelListPage: React.FC<any> = () => {
     refresh,
     updateParams,
   } = useNovelList();
+
+  useEffect(() => {
+    if (!highlightedNovelId) return;
+    const timer = window.setTimeout(() => {
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.delete('highlight');
+        return next;
+      }, { replace: true });
+    }, 6000);
+    return () => window.clearTimeout(timer);
+  }, [highlightedNovelId, setSearchParams]);
 
   if (loading) {
     return <NovelListSkeleton />;
@@ -87,19 +104,27 @@ export const NovelListPage: React.FC<any> = () => {
           <Typography.Title className="br-page-title" level={2}>全部小说</Typography.Title>
           <Typography.Text type="secondary">已收录 {total} 本小说</Typography.Text>
         </div>
-        <Segmented
-          aria-label="切换小说显示方式"
-          value={view}
-          options={[
-            { value: 'list', icon: <UnorderedListOutlined />, label: '列表' },
-            { value: 'grid', icon: <AppstoreOutlined />, label: '网格' },
-          ]}
-          onChange={(value) => {
-            const next = value as 'list' | 'grid';
-            setView(next);
-            localStorage.setItem('bearreader/novels/view', next);
-          }}
-        />
+        <Flex gap={8} wrap justify="end">
+          <Button
+            icon={<UploadOutlined />}
+            onClick={() => setImportOpen(true)}
+          >
+            导入 EPUB
+          </Button>
+          <Segmented
+            aria-label="切换小说显示方式"
+            value={view}
+            options={[
+              { value: 'list', icon: <UnorderedListOutlined />, label: '列表' },
+              { value: 'grid', icon: <AppstoreOutlined />, label: '网格' },
+            ]}
+            onChange={(value) => {
+              const next = value as 'list' | 'grid';
+              setView(next);
+              localStorage.setItem('bearreader/novels/view', next);
+            }}
+          />
+        </Flex>
       </Flex>
 
       <NovelFilterBox
@@ -112,7 +137,16 @@ export const NovelListPage: React.FC<any> = () => {
       <Row gutter={view === 'list' ? [12, 12] : [16, 16]} style={{ marginTop: 24 }}>
         {novels.map((novel) => (
           <Col key={novel.id} xs={view === 'list' ? 24 : 12} sm={view === 'list' ? 24 : 8} lg={view === 'list' ? 12 : 6} xl={view === 'list' ? 12 : 4}>
-            <div style={{ position: 'relative' }}>
+            <div
+              style={{
+                position: 'relative',
+                outline:
+                  highlightedNovelId === novel.id
+                    ? '2px solid var(--br-border-strong)'
+                    : undefined,
+                outlineOffset: 2,
+              }}
+            >
               <div
                 style={{ position: 'absolute', right: 4, top: 4, zIndex: 2 }}
                 onClick={(e) => e.stopPropagation()}
@@ -144,6 +178,10 @@ export const NovelListPage: React.FC<any> = () => {
         onChange={(page) => updateParams({ page })}
         style={{ textAlign: 'center', marginTop: 32 }}
         hideOnSinglePage
+      />
+      <EpubImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
       />
     </div>
   );

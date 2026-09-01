@@ -94,6 +94,13 @@ class Job(BaseTable, table=True):
     @computed_field  # type: ignore[misc]
     @property
     def job_title(self) -> str:
+        if self.type == JobType.IMPORT_EPUB_ANALYZE:
+            return f"分析 EPUB · {self.extra.get('original_name') or '本地书籍'}"
+
+        if self.type == JobType.IMPORT_EPUB_COMMIT:
+            title = self.extra.get("novel_title") or "本地书籍"
+            return f"导入 EPUB · {title}"
+
         # Require the URL only
         if self.type == JobType.NOVEL or self.type == JobType.FULL_NOVEL:
             return self.extra["url"]

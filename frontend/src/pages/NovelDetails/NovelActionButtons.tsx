@@ -3,7 +3,12 @@ import { AddToLibraryButton } from '@/components/Library/AddToLibraryButton';
 import { Auth } from '@/store/_auth';
 import type { Job, Novel } from '@/types';
 import { stringifyError } from '@/utils/errors';
-import { BookOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
+import {
+  BookOutlined,
+  DeleteOutlined,
+  LeftOutlined,
+  ReloadOutlined,
+} from '@ant-design/icons';
 import { Button, Flex, message, Popconfirm } from 'antd';
 import axios from 'axios';
 import { useState } from 'react';
@@ -76,12 +81,24 @@ export const NovelActionButtons: React.FC<{ novel: Novel }> = ({ novel }) => {
       )}
       <div style={{ flex: 1 }} />
       <AddToLibraryButton novelId={novel.id} />
+      {novel.extra.imported && (
+        <Button
+          icon={<LeftOutlined />}
+          onClick={() =>
+            navigate(`/novels?sort=updated&highlight=${encodeURIComponent(novel.id)}`)
+          }
+        >
+          返回全部小说
+        </Button>
+      )}
       <Button icon={<BookOutlined />} onClick={handleContinue}>
         继续阅读
       </Button>
-      <Button icon={<ReloadOutlined />} loading={busy} onClick={handleRefresh}>
-        检查更新并补全
-      </Button>
+      {!novel.extra.imported && (
+        <Button icon={<ReloadOutlined />} loading={busy} onClick={handleRefresh}>
+          检查更新并补全
+        </Button>
+      )}
     </Flex>
   );
 };

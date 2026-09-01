@@ -1,5 +1,6 @@
 import FallbackImage from '@/assets/no-image.svg';
 import { Favicon } from '@/components/Favicon';
+import { ImportedCover } from '@/components/ImportedCover';
 import { API_BASE_URL } from '@/config';
 import { Auth } from '@/store/_auth';
 import type { Novel } from '@/types';
@@ -23,15 +24,28 @@ export const NovelListItemCard: React.FC<{ novel: Novel; view?: 'grid' | 'list' 
         style={{ height: '100%', cursor: 'pointer', userSelect: 'none' }}
       >
         <Flex gap={16} align="center">
-          <Image
-            alt="小说封面"
-            preview={false}
-            src={`${API_BASE_URL}/static/${novel.cover_file}?token=${token}`}
-            fallback={FallbackImage}
-            width={64}
-            height={86}
-            style={{ objectFit: 'cover', border: '1px solid var(--br-border)' }}
-          />
+          {novel.extra.imported && !novel.cover_available ? (
+            <ImportedCover
+              novel={novel}
+              style={{
+                width: 64,
+                height: 86,
+                border: '1px solid var(--br-border)',
+                flex: '0 0 auto',
+                padding: 8,
+              }}
+            />
+          ) : (
+            <Image
+              alt="小说封面"
+              preview={false}
+              src={`${API_BASE_URL}/static/${novel.cover_file}?token=${token}`}
+              fallback={FallbackImage}
+              width={64}
+              height={86}
+              style={{ objectFit: 'cover', border: '1px solid var(--br-border)' }}
+            />
+          )}
           <Flex vertical gap={5} style={{ minWidth: 0, flex: 1 }}>
             <Typography.Title level={5} className="br-serif" ellipsis style={{ margin: 0 }}>
               {novel.title || '未命名小说'}
@@ -84,37 +98,53 @@ export const NovelListItemCard: React.FC<{ novel: Novel; view?: 'grid' | 'list' 
           overflow: 'hidden',
         }}
       >
-        <Image
-          alt="小说封面"
-          preview={false}
-          src={`${API_BASE_URL}/static/${novel.cover_file}?token=${token}`}
-          fallback={FallbackImage}
-          fetchPriority="low"
-          style={{
-            objectFit: 'cover',
-            height: '100%',
-            width: '100%',
-          }}
-          styles={{
-            root: {
+        {novel.extra.imported && !novel.cover_available ? (
+          <ImportedCover
+            novel={novel}
+            style={{
               position: 'absolute',
-              top: 0,
-              left: 0,
+              inset: 0,
               width: '100%',
               height: '100%',
-            },
-          }}
-        />
-        <Favicon
-          size="small"
-          url={novel.url}
-          style={{
-            position: 'absolute',
-            top: 3,
-            left: 5,
-            backdropFilter: 'blur(10px)',
-          }}
-        />
+            }}
+          />
+        ) : (
+          <>
+            <Image
+              alt="小说封面"
+              preview={false}
+              src={`${API_BASE_URL}/static/${novel.cover_file}?token=${token}`}
+              fallback={FallbackImage}
+              fetchPriority="low"
+              style={{
+                objectFit: 'cover',
+                height: '100%',
+                width: '100%',
+              }}
+              styles={{
+                root: {
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                },
+              }}
+            />
+            {!novel.extra.imported && (
+              <Favicon
+                size="small"
+                url={novel.url}
+                style={{
+                  position: 'absolute',
+                  top: 3,
+                  left: 5,
+                  backdropFilter: 'blur(10px)',
+                }}
+              />
+            )}
+          </>
+        )}
       </div>
       <div
         style={{

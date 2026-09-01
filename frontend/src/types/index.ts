@@ -51,6 +51,45 @@ export interface Paginated<T> {
   items: T[];
 }
 
+export interface EpubImportSample {
+  title: string;
+  body_preview: string;
+}
+
+export interface EpubImportPreview {
+  title: string;
+  authors: string;
+  language?: string;
+  synopsis: string;
+  tags: string[];
+  chapters: number;
+  volumes: number;
+  cover_available: boolean;
+  samples: EpubImportSample[];
+}
+
+export interface EpubImportStartResponse {
+  session_id?: string;
+  job_id?: string;
+  existing_novel_id?: string;
+}
+
+export interface EpubImportSession {
+  id: string;
+  status: string;
+  original_name: string;
+  file_size: number;
+  expires_at: number;
+  analyze_job_id?: string;
+  commit_job_id?: string;
+  novel_id?: string;
+  job_status?: JobStatus;
+  progress: number;
+  phase?: string;
+  error?: string;
+  preview?: EpubImportPreview;
+}
+
 export interface Job extends _Base {
   parent_job_id?: string;
 
@@ -105,6 +144,10 @@ export interface Job extends _Base {
       url: string;
       info?: string;
     }[];
+    import_session_id?: string;
+    original_name?: string;
+    authors?: string;
+    phase?: string;
   };
 }
 
@@ -130,6 +173,10 @@ export interface Novel extends _Base {
 
   extra: {
     crawler_version?: number;
+    imported?: boolean;
+    source_format?: string;
+    original_name?: string;
+    file_sha256?: string;
   };
 }
 
@@ -166,6 +213,8 @@ export interface Chapter extends _Base {
 
   extra: {
     crawler_version?: number;
+    imported?: boolean;
+    source_format?: string;
   };
 }
 

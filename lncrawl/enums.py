@@ -39,6 +39,8 @@ class JobType(IntEnum):
     SEARCH_ALL_SOURCES = 51
     FETCH_MISSING = 60
     FETCH_LATEST = 61
+    IMPORT_EPUB_ANALYZE = 70
+    IMPORT_EPUB_COMMIT = 71
 
 
 class JobStatus(IntEnum):

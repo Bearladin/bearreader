@@ -9,6 +9,7 @@ from .announcement import Announcement
 from .artifact import Artifact
 from .chapter import Chapter, ChapterTranslation
 from .chapter_image import ChapterImage
+from .import_session import ImportSession
 from .job import Job
 from .library import Library, LibraryFavorite, LibraryNovel
 from .novel import Novel, NovelGlossary, NovelTranslation
@@ -40,6 +41,7 @@ models: List[Type[SQLModel]] = [
     Job,
     Secret,
     Announcement,
+    ImportSession,
 ]
 
 tables: List[Table] = [
