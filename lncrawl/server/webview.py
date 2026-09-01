@@ -13,6 +13,11 @@ from scraper import find_chromium
 from ..context import ctx
 from ..distribution import DISTRIBUTION
 from ..enums import UserRole
+from ..startup_diagnostics import (
+    StartupLogCapture,
+    record_startup_failure,
+    show_startup_failure,
+)
 from ..utils.platforms import Screen
 from ..utils.sockets import free_port
 from .lifecycle import bye_received
@@ -81,12 +86,19 @@ def _acquire_single_instance_lock() -> "Optional[object]":
 # ---------------------------------------------------------------------------
 
 
+def _write(message: str = "", end: str = "\n") -> None:
+    try:
+        print(message, end=end, flush=True)
+    except (OSError, ValueError):
+        pass
+
+
 def _line(message: str = "") -> None:
-    print(message, flush=True)
+    _write(message)
 
 
 def _status(message: str) -> None:
-    print(f"  {message}", flush=True)
+    _line(f"  {message}")
 
 
 def _banner() -> None:
@@ -163,14 +175,24 @@ def _restore_console() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _start_server(host: str, port: int) -> None:
-    from ..commands.server import server
+def _start_server(
+    host: str,
+    port: int,
+    startup_log_handler: StartupLogCapture,
+) -> None:
+    from ..commands.server import run_server
 
     ctx.setup(
         log_level=0,
         reset_db_on_failure=True,
     )
-    server(host=host, port=port)
+    run_server(
+        host=host,
+        port=port,
+        watch=False,
+        workers=1,
+        startup_log_handler=startup_log_handler,
+    )
 
 
 def _wait_for_ready(
@@ -188,7 +210,7 @@ def _wait_for_ready(
     last_error: Optional[BaseException] = None
     frame = 0
 
-    print("  Starting the server  ", end="", flush=True)
+    _write("  Starting the server  ", end="")
     while time.monotonic() < deadline:
         # Surface a crashed server thread immediately instead of timing out.
         error = server_error.get("error")
@@ -199,10 +221,17 @@ def _wait_for_ready(
         try:
             with urlopen(url, timeout=1) as resp:
                 if resp.status == 200:
-                    print("\r  Server is ready.            ", flush=True)
+                    _write("\r  Server is ready.            ")
                     return
         except Exception as e:
             last_error = e
+
+        # The server can fail while the one-second health request is in flight.
+        # Prefer its recorded exception over the connection error from this poll.
+        error = server_error.get("error")
+        if error is not None:
+            _line()
+            raise error
 
         # uvicorn swallows a lifespan-startup failure and returns without raising, so the
         # thread ends with no error set. Fail fast instead of polling a dead port for the
@@ -213,7 +242,7 @@ def _wait_for_ready(
                 "The server stopped before becoming ready; check the log above for the cause."
             ) from last_error
 
-        print(f"\r  Starting the server {_SPINNER[frame % len(_SPINNER)]} ", end="", flush=True)
+        _write(f"\r  Starting the server {_SPINNER[frame % len(_SPINNER)]} ", end="")
         frame += 1
         time.sleep(0.2)
 
@@ -252,6 +281,7 @@ def _launch_app_window(url: str, manage_console: bool) -> None:
     # Try every installed Chromium in turn: one broken install (e.g. a missing
     # VC++ runtime, WinError 14001) must not block a healthy one.
     proc = None
+    launched_binary = ""
     last_error: Optional[BaseException] = None
     for binary in binaries:
         args = [
@@ -269,6 +299,7 @@ def _launch_app_window(url: str, manage_console: bool) -> None:
         try:
             logger.info(f"Opening app-mode browser: {binary}")
             proc = subprocess.Popen(args)
+            launched_binary = str(binary)
             break
         except OSError as error:
             last_error = error
@@ -285,7 +316,10 @@ def _launch_app_window(url: str, manage_console: bool) -> None:
         code = proc.poll()
         if code is not None:
             logger.warning(f"Browser launcher exited early (code={code})")
-            _keep_alive(url)
+            _keep_alive(
+                url,
+                launch_diagnostic=f"Launcher: {launched_binary}; exit code: {code}.",
+            )
             return
         time.sleep(0.1)
 
@@ -422,6 +456,7 @@ def _keep_alive(
     url: str,
     appeared_initial: bool = False,
     proc: "Optional[subprocess.Popen]" = None,
+    launch_diagnostic: str = "",
 ) -> None:
     """The windowed build has no console input.
 
@@ -477,6 +512,11 @@ def _keep_alive(
             last_seen = now
         elif not appeared and not notified and now - started > 20:
             notified = True
+            record_startup_failure(
+                "browser-window",
+                "The browser launcher returned, but no BearReader window appeared within "
+                f"20 seconds. {launch_diagnostic}".strip(),
+            )
             _notify_url(url)
         elif appeared and last_seen is not None and now - last_seen > CLOSED_AFTER:
             return  # the last window or tab was closed
@@ -509,15 +549,28 @@ def _run_in_system_browser(url: str) -> None:
     _keep_alive(url, appeared_initial=True)
 
 
-def _fatal(message: str, error: BaseException) -> None:
+def _fatal(
+    message: str,
+    error: BaseException,
+    captured_logs: str = "",
+) -> None:
     _restore_console()
     logger.error(message, exc_info=error)
+    log_path = record_startup_failure(
+        "desktop-launcher",
+        message,
+        error=error,
+        captured_logs=captured_logs,
+    )
     _line()
     _line("  " + "-" * 48)
     _status(f"[ERROR] {message}")
     _status(f"Reason: {error}")
+    if log_path is not None:
+        _status(f"Diagnostic log: {log_path}")
     _line("  " + "-" * 48)
     _line()
+    show_startup_failure("BearReader 启动失败。", log_path)
     _status("The application could not start. Review the messages above.")
     if sys.stdin is not None:
         with suppress(EOFError, KeyboardInterrupt, RuntimeError):
@@ -538,6 +591,7 @@ def start(manage_console: bool = False) -> None:
     Pass manage_console=True from the frozen double-click path; leave it False
     when invoked from a real terminal (`lncrawl app`) so the user's shell is
     never hidden."""
+    capture = StartupLogCapture()
     if manage_console:
         # Frozen double-click path: refuse to run alongside another desktop
         # instance on the same data directory (scheduler/SQLite corruption).
@@ -553,6 +607,7 @@ def start(manage_console: bool = False) -> None:
                     takeover = True
                     break
             if not takeover:
+                capture.close()
                 _restore_console()
                 _line()
                 _status("程序已经在运行。")
@@ -571,7 +626,7 @@ def start(manage_console: bool = False) -> None:
 
     def _run_server() -> None:
         try:
-            _start_server(host, port)
+            _start_server(host, port, capture)
         except BaseException as e:
             server_error["error"] = e
             logger.exception("Server thread crashed")
@@ -583,8 +638,10 @@ def start(manage_console: bool = False) -> None:
         _wait_for_ready(host, port, server_error, server_thread)
         url = _build_url(host, port)
     except Exception as e:
-        _fatal("The server failed to start.", e)
+        _fatal("The server failed to start.", e, capture.text())
+        capture.close()
         return
+    capture.close()
 
     _status("Opening the application window...")
     try:

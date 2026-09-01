@@ -164,7 +164,7 @@ Recipes: **`output-and-translation` skill**.
 [lncrawl/config.py](lncrawl/config.py): typed config — `_Section` subclasses exposing
 `@property` getter/setter pairs over a JSON-persisted store; property docstrings surface in
 the admin settings UI. Secrets are marked `Annotated[..., Sensitive]` and redacted in the
-admin API. Data dir: `LNCRAWL_DATA_PATH` env var, else the platform app dir; `DATABASE_URL`
+admin API. Data dir: `XIAOXIONG_NOVEL_DATA_PATH` env var, else the platform app dir; `DATABASE_URL`
 and `LNCRAWL_CONFIG` override DB and config file; `.env` is auto-loaded.
 
 ## Conventions
