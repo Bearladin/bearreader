@@ -140,6 +140,14 @@ def _validate_executable_icons(bundle: Path) -> None:
         raise ValueError("BearReader.exe and backendtool.exe must use different icons")
 
 
+def _validate_utf8_runtime_option(executable: Path) -> None:
+    from PyInstaller.archive.readers import CArchiveReader
+
+    options = CArchiveReader(str(executable)).options
+    if "X utf8" not in options:
+        raise ValueError(f"Executable does not enable Python UTF-8 mode: {executable}")
+
+
 def run_self_test() -> None:
     synthetic = repr(
         (
@@ -174,6 +182,8 @@ def verify_bundle(bundle: Path, analysis_root: Optional[Path] = None) -> None:
     if retired:
         raise ValueError(f"Bundle contains retired compatibility entries: {retired}")
     _validate_executable_icons(bundle)
+    for name in EXPECTED_EXES:
+        _validate_utf8_runtime_option(bundle / name)
 
     source_root = _bundle_sources(bundle)
     language_dirs = {

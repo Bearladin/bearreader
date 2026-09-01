@@ -49,6 +49,8 @@ def build_command(
         f"--distpath={DIST_DIR}",
         f"--specpath={SPEC_DIR}",
         f"--workpath={BUILD_DIR}",
+        "--python-option",
+        "X utf8",
     ]
     if not console:
         command.append("--noconsole")

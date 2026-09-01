@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- **Windows startup now uses UTF-8 and preserves failure diagnostics** — Both bundled executables enable Python's UTF-8 mode before interpreter startup, while desktop launch failures and missing browser windows write a bounded UTF-8 log under the application data directory for troubleshooting paths on any Windows locale.
 - **The job scrubber no longer crashes on stuck legacy jobs** — A root job left unfinished by an older version (e.g. killed mid-run) crashed the background scrubber loop forever with "Only finished jobs can be deleted", halting every cleanup duty; the delete pass now selects finished jobs only, and stuck jobs of any state are cancelled after 16 hours so they get reaped on the next pass.
 
 ## [1.3.1] - 2026-08-31
