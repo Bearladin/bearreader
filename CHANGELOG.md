@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
-- **A close confirmation before the app window shuts** — Clicking X or Alt+F4 in app mode first asks the browser's leave-confirmation dialog, so an accidental click cannot kill a running reading or download session; a "关闭时确认" switch in the reader settings (on by default) turns it off.
+- **A close confirmation before the app window shuts** — Clicking X or Alt+F4 in app mode first asks the browser's leave-confirmation dialog, so an accidental click cannot kill a running reading or download session; a "关闭时确认" switch in the reader settings (on by default) turns it off. The service worker's self-reload on updates stays silent — it is lossless and must not ask.
 - **The app-mode browser no longer bloats the data directory** — The window is an Edge app profile that used to accumulate hundreds of MB of wallet/shopping/visual-search components and update caches inside the app data folder; launch flags now disable those side components while keeping rendering, cookies, sessions and Safe Browsing untouched.
 
 ### Fixed
