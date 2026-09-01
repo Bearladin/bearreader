@@ -23,8 +23,18 @@ moment.locale('zh-cn');
 // path) must NOT send this — its close is not "app closed". sendBeacon keeps
 // the POST alive during unload; the backend only marks a timestamp and the
 // keep-alive loop still verifies the window title is gone before exiting.
+//
+// The close-confirmation (confirmOnClose) makes the browser ask before the
+// window actually closes, so an accidental click on X cannot kill a reading
+// or download session. When the user stays, the early bye beacon is
+// harmless: the backend requires the window title to stay gone as well.
 if (new URLSearchParams(window.location.search).has('app')) {
-  window.addEventListener('beforeunload', () => {
+  window.addEventListener('beforeunload', (e) => {
+    if (store.getState().reader.confirmOnClose) {
+      e.preventDefault();
+      // Chromium requires this legacy property to show the dialog
+      e.returnValue = '';
+    }
     navigator.sendBeacon('/api/app/bye');
   });
 }

@@ -482,6 +482,14 @@ def _keep_alive(
     # the window. 8s = 4 polling rounds; kept short so the single-instance
     # mutex of a relaunch doesn't block for long (was 20s).
     CLOSED_AFTER = 8.0
+    # Zombie bailout: on some machines every exit signal misfires at once
+    # (browser handed the window to an unrelated-looking process, title
+    # probing finds a same-named foreign window, the bye beacon never
+    # arrives). The loop must never hang forever holding the single-instance
+    # mutex — after this long without a window sighting, wind down and let
+    # the diagnostic tell the user what happened.
+    ZOMBIE_AFTER = 10 * 60.0
+    zombie_logged = False
 
     def _browser_alive() -> bool:
         # True while the browser we launched (or a descendant holding the
@@ -522,6 +530,25 @@ def _keep_alive(
             return  # the last window or tab was closed
         elif not appeared and now - started > 300:
             return  # never opened; wrap up
+        elif (
+            appeared
+            and last_seen is not None
+            and now - last_seen > ZOMBIE_AFTER
+            and _browser_alive()
+            and not zombie_logged
+        ):
+            # The window is long gone but the browser process tree still
+            # holds our app profile: probe failure, not a live session.
+            zombie_logged = True
+            record_startup_failure(
+                "keep-alive",
+                "The app window has not been seen for "
+                f"{int(ZOMBIE_AFTER / 60)} minutes while a browser process is still "
+                "running with the app profile. Exiting to release the single-instance "
+                "lock; if the window was actually open, it will reconnect to a "
+                "restarted server.",
+            )
+            return
         time.sleep(2)
 
 
@@ -612,6 +639,26 @@ def start(manage_console: bool = False) -> None:
                 _line()
                 _status("程序已经在运行。")
                 _line()
+                # The launcher console hides quickly — a silent exit here
+                # reads as "double-click does nothing" (user report: app
+                # would not open after a previous unclean exit). Show a
+                # modal, self-dismissing box so the user knows what to do.
+                message = (
+                    "BearReader 已在运行，或上次未正常退出。\n\n"
+                    "请先结束所有 BearReader 进程（任务管理器中结束 BearReader.exe / "
+                    "backendtool.exe），或重启电脑后再试。"
+                )
+                if sys.stdin is None:
+                    import ctypes
+
+                    def _show() -> None:
+                        ctypes.windll.user32.MessageBoxTimeoutW(
+                            None, message, APP_NAME, 0x30, 0, 15000
+                        )
+
+                    Thread(target=_show, daemon=True).start()
+                    time.sleep(16)
+                record_startup_failure("single-instance", message)
                 return
 
     if manage_console and _owns_console():

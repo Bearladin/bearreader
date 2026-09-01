@@ -29,6 +29,8 @@ export interface ReaderState {
   autoFetch: boolean;
   autoScroll: boolean;
   autoScrollSpeed: number;
+  /** 关闭窗口/刷新前的浏览器原生确认框（应用模式） */
+  confirmOnClose: boolean;
   /** 每本书最后阅读位置（key=novelId）；继续阅读恢复滚动用 */
   lastReads: Record<string, LastRead>;
 }
@@ -48,6 +50,7 @@ const buildInitialState = (): ReaderState => ({
   textAlign: TextAlign.left,
   autoScroll: false,
   autoScrollSpeed: 100,
+  confirmOnClose: true,
   lastReads: {},
 });
 
@@ -101,6 +104,9 @@ export const ReaderSlice = createSlice({
     setAutoScrollSpeed(state, action: PayloadAction<number>) {
       state.autoScrollSpeed = Math.min(300, Math.max(10, action.payload));
     },
+    setConfirmOnClose(state, action: PayloadAction<boolean>) {
+      state.confirmOnClose = action.payload;
+    },
     setLastRead(
       state,
       action: PayloadAction<{
@@ -143,6 +149,10 @@ export const Reader = {
     autoScrollSpeed: createSelector(
       selectReader,
       (reader) => reader.autoScrollSpeed
+    ),
+    confirmOnClose: createSelector(
+      selectReader,
+      (reader) => reader.confirmOnClose
     ),
   },
 };

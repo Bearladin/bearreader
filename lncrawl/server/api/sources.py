@@ -1,3 +1,4 @@
+import logging
 from typing import List
 
 from fastapi import APIRouter, Body, Path, Query, Security
@@ -14,6 +15,8 @@ from ..models import (
 )
 from ..security import ensure_admin, ensure_user
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
@@ -26,7 +29,14 @@ def list_sources(
     user: User = Security(ensure_user),
 ) -> List[SourceItem]:
     ctx.activity.record(user.id, ActivityType.SOURCES, "sources")
-    count = ctx.novels.list_domains()
+    # The per-domain novel count is a decoration; a legacy/corrupt database
+    # must not take the whole source listing down with it (user report:
+    # every source failed to load until the data dir was wiped).
+    try:
+        count = ctx.novels.list_domains()
+    except Exception:
+        logger.warning("Novel domain counts failed; showing sources without counts", exc_info=True)
+        count = {}
     result = ctx.sources.list(
         include_rejected=not skip_rejected,
     )
