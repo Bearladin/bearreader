@@ -1,0 +1,1 @@
+import{j as r,c as o}from"./index-DgkSDcVo.js";import{F as i,j as a,B as n}from"./vendor-antd-Bhw0FLX9.js";const x=({title:e,error:s,onRetry:t})=>r.jsx(i,{align:"center",justify:"center",style:{height:"100%"},children:r.jsx(a,{status:"error",title:e,subTitle:s||"加载数据时发生错误。",extra:t?r.jsx(n,{onClick:t,children:o.common.retry},"retry"):void 0})});export{x as E};
