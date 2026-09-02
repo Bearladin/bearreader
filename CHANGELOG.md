@@ -15,6 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- **本地 EPUB/TXT 上传恢复正常** — 移除把文件表单错误序列化为 JSON 的全局请求头，并让参数验证错误显示具体原因。
+- **本地书架界面去除多用户残留** — 新建书架不再提供公开选项，卡片不再显示公开状态或本地管理员所有者信息，小说目录也移除不符合中文阅读习惯的字符序书名排序。
 - **The desktop launcher no longer lingers as a zombie process** — When every exit signal misfires at once (window handed to an untracked process, title probe hitting a foreign window, bye beacon lost), the keep-alive loop used to wait forever while holding the single-instance lock; it now winds down after 2 minutes without a window sighting and records a diagnostic, so a relaunch after an unclean close recovers quickly.
 - **"Already running" is now visible instead of a silent exit** — When the single-instance lock stays held after the takeover wait, a self-dismissing message box tells the user to end the leftover processes instead of double-clicking doing nothing.
 - **A damaged legacy database no longer breaks the whole source list** — The per-domain novel count is decorative; when its query fails, sources still load without counts and the failure is logged, instead of failing the entire endpoint (previously required wiping the data directory).

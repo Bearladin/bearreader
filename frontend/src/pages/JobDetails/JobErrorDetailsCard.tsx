@@ -27,7 +27,7 @@ const LEGACY_JOB_MESSAGES: Record<string, string> = {
   'Failed to make artifact': '生成导出文件失败',
   'Source domain is not specified': '未指定书源域名',
   'Search query must be at least 2 characters long':
-    '搜索关键词至少需要 2 个字符',
+    '搜索关键词至少需要 2 个字',
   'Unexpected runner error': '任务调度器发生意外错误',
 };
 

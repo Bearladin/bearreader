@@ -101,10 +101,10 @@ export const RequestNovelCard: React.FC<any> = () => {
                 }
               }
               if (v.length < 2) {
-                return Promise.reject(new Error('书名至少需要 2 个字符'));
+                return Promise.reject(new Error('书名至少需要 2 个字'));
               }
               if (v.length > 50) {
-                return Promise.reject(new Error('书名最多 50 个字符'));
+                return Promise.reject(new Error('书名最多 50 个字'));
               }
               return Promise.resolve();
             },
@@ -163,7 +163,7 @@ export const RequestNovelCard: React.FC<any> = () => {
 
       <Typography.Text type="secondary" style={{ fontSize: 13 }}>
         输入小说页面的完整 URL（以“http://”或“https://”开头），或直接输入书名（2–50
-        个字符），系统会在支持搜索的书源中查找并获取小说。仅 www.mayiwsk.com 支持书名搜索。
+        个字），系统会在支持搜索的书源中查找并获取小说。仅 www.mayiwsk.com 支持书名搜索。
       </Typography.Text>
     </Form>
   );

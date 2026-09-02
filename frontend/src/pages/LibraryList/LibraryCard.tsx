@@ -1,14 +1,11 @@
-import { Auth } from '@/store/_auth';
 import type { Library } from '@/types';
-import { BookOutlined, UserOutlined } from '@ant-design/icons';
-import { Card, Col, Divider, Flex, Space, Tag, Typography } from 'antd';
+import { BookOutlined } from '@ant-design/icons';
+import { Card, Col, Flex, Space, Typography } from 'antd';
 import type React from 'react';
-import { useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 
 export const LibraryCard: React.FC<{ library: Library }> = ({ library }) => {
   const navigate = useNavigate();
-  const user = useSelector(Auth.select.user);
 
   return (
     <Col key={library.id} xs={24} sm={12} md={24} lg={12} xl={8}>
@@ -42,9 +39,6 @@ export const LibraryCard: React.FC<{ library: Library }> = ({ library }) => {
               {library.name}
             </Typography.Title>
           </Space>
-          <Tag bordered={false}>
-            {library.is_public ? '公开' : '私密'}
-          </Tag>
         </Flex>
 
         {/* Description */}
@@ -59,7 +53,7 @@ export const LibraryCard: React.FC<{ library: Library }> = ({ library }) => {
         {/* Footer */}
         <Flex
           align="center"
-          justify="space-between"
+          justify="flex-end"
           wrap="wrap"
           style={{
             marginTop: 8,
@@ -67,14 +61,6 @@ export const LibraryCard: React.FC<{ library: Library }> = ({ library }) => {
             borderTop: '1px solid var(--br-border)',
           }}
         >
-          <Space size="small">
-            <UserOutlined style={{ fontSize: 14 }} />
-            <Typography.Text style={{ fontSize: 14 }}>
-              {library.extra.owner_name || '未知用户'}
-              {library.user_id === user?.id ? '（我）' : ''}
-            </Typography.Text>
-          </Space>
-          <Divider orientation="vertical" />
           <Space size="small">
             <BookOutlined style={{ fontSize: 14 }} />
             <Typography.Text strong style={{ fontSize: 14 }}>

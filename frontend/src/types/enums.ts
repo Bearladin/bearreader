@@ -98,13 +98,11 @@ export const LibraryNovelSort = {
 export type LibraryNovelSort =
   (typeof LibraryNovelSort)[keyof typeof LibraryNovelSort];
 
-export const NOVEL_SORT_LABELS: Record<NovelSort, string> = {
+export const NOVEL_SORT_LABELS: Partial<Record<NovelSort, string>> = {
   popular: '人气最高',
   updated: '最近更新',
   created: '最近收录',
   chapters: '章节最多',
-  title_asc: '书名升序',
-  title_desc: '书名降序',
 };
 
 export const LIBRARY_SORT_LABELS: Record<LibraryNovelSort, string> = {

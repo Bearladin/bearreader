@@ -1,12 +1,9 @@
-import { Auth } from '@/store/_auth';
 import { Flex, Typography } from 'antd';
 import { useState } from 'react';
-import { useSelector } from 'react-redux';
 import { CreateLibraryButton } from './CreateLibraryButton';
 import { LibraryList } from './LibraryList';
 
 export const LibraryListPage: React.FC = () => {
-  const isAdmin = useSelector(Auth.select.isAdmin);
   const [refresh, setRefresh] = useState(0);
 
   return (
@@ -19,7 +16,7 @@ export const LibraryListPage: React.FC = () => {
         </div>
         <CreateLibraryButton onSuccess={() => setRefresh((v) => v + 1)} />
       </Flex>
-      <LibraryList type={isAdmin ? 'all' : 'my'} refreshId={refresh} />
+      <LibraryList type="my" refreshId={refresh} />
     </div>
   );
 };

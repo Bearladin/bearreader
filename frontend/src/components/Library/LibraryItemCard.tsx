@@ -1,6 +1,6 @@
 import type { LibraryItem } from '@/types';
 import { BookOutlined } from '@ant-design/icons';
-import { Card, Flex, Tag, Typography } from 'antd';
+import { Card, Flex, Typography } from 'antd';
 
 export const LibraryItemCard: React.FC<{
   library: LibraryItem;
@@ -24,14 +24,8 @@ export const LibraryItemCard: React.FC<{
         />
 
         <Flex vertical style={{ flex: 1, minWidth: 0 }}>
-          <Flex wrap gap={8} align="center" justify="space-between">
+          <Flex wrap gap={8} align="center">
             <Typography.Text strong>{library.name}</Typography.Text>
-
-            {library.is_public ? (
-              <Tag bordered={false}>公开</Tag>
-            ) : (
-              <Tag bordered={false}>私有</Tag>
-            )}
           </Flex>
 
           {library.description && (

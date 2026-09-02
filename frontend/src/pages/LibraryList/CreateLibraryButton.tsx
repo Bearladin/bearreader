@@ -2,14 +2,13 @@ import { copy } from '@/locales/zh-CN';
 import type { Library } from '@/types';
 import { stringifyError } from '@/utils/errors';
 import { FolderAddOutlined } from '@ant-design/icons';
-import { Button, Form, Input, message, Modal, Switch } from 'antd';
+import { Button, Form, Input, message, Modal } from 'antd';
 import axios from 'axios';
 import { useState } from 'react';
 
 type FormValues = {
   name: string;
   description?: string;
-  is_public?: boolean;
 };
 
 export const CreateLibraryButton: React.FC<{
@@ -25,9 +24,8 @@ export const CreateLibraryButton: React.FC<{
     setSaving(true);
     try {
       await axios.post<Library>('/api/library', {
-        name: values.name,
-        description: values.description,
-        is_public: Boolean(values.is_public),
+        name: values.name.trim(),
+        description: values.description?.trim() || undefined,
       });
       messageApi.success('书架创建成功。');
       form.resetFields();
@@ -68,7 +66,6 @@ export const CreateLibraryButton: React.FC<{
           form={form}
           layout="vertical"
           onFinish={handleCreate}
-          initialValues={{ is_public: false }}
         >
           <Form.Item
             label="名称"
@@ -80,14 +77,6 @@ export const CreateLibraryButton: React.FC<{
 
           <Form.Item label="描述" name="description">
             <Input.TextArea rows={3} placeholder="可选：输入书架描述" />
-          </Form.Item>
-
-          <Form.Item
-            label="设为公开"
-            name="is_public"
-            valuePropName="checked"
-          >
-            <Switch />
           </Form.Item>
         </Form>
       </Modal>
