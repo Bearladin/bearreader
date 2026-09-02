@@ -5,11 +5,13 @@ import os
 from pathlib import Path
 import re
 from threading import Event
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 import unicodedata
 
 from charset_normalizer import from_bytes
 import regex as safe_regex
+
+from .progress import ImportProgressCallback, map_progress
 
 MAX_TXT_UPLOAD_BYTES = 20 * 1024 * 1024
 MAX_NORMALIZED_BYTES = 30 * 1024 * 1024
@@ -126,15 +128,28 @@ def detect_encoding(path: Path, requested: Optional[str] = None) -> Dict[str, An
     }
 
 
-def normalize_txt(source_path: Path, target_path: Path, encoding: str, signal: Event) -> None:
+def normalize_txt(
+    source_path: Path,
+    target_path: Path,
+    encoding: str,
+    signal: Event,
+    on_progress: ImportProgressCallback,
+) -> None:
     decoder = codecs.getincrementaldecoder(encoding)(errors="strict")
     temporary = target_path.with_suffix(".tmp")
     pending_cr = False
     written = 0
+    read_bytes = 0
+    source_size = source_path.stat().st_size
     try:
         with source_path.open("rb") as source, temporary.open("wb") as target:
             for raw in iter(lambda: source.read(64 * 1024), b""):
                 _check_cancel(signal)
+                read_bytes += len(raw)
+                on_progress(
+                    f"正在规范化正文 {read_bytes} / {source_size} bytes",
+                    map_progress(5, 45, read_bytes, source_size),
+                )
                 text = decoder.decode(raw)
                 if pending_cr:
                     text = "\r" + text
@@ -255,18 +270,24 @@ class TxtAdapter:
         source_path: Path,
         prepared_dir: Path,
         signal: Event,
-        on_phase: Callable[[str], None],
+        on_progress: ImportProgressCallback,
         options: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         options = dict(options or {})
         prepared_dir.mkdir(parents=True, exist_ok=True)
-        on_phase("识别 TXT 编码")
+        on_progress("识别 TXT 编码", 1)
         encoding_info = detect_encoding(source_path, options.get("encoding"))
         normalized = prepared_dir / "normalized.txt"
-        on_phase("规范化 TXT 正文")
-        normalize_txt(source_path, normalized, encoding_info["selected"], signal)
+        on_progress("规范化 TXT 正文", 5)
+        normalize_txt(
+            source_path,
+            normalized,
+            encoding_info["selected"],
+            signal,
+            on_progress,
+        )
 
-        on_phase("识别章节和段落")
+        on_progress("识别章节和段落", 45)
         custom_pattern = options.get("chapter_pattern")
         try:
             chapter_pattern = (
@@ -284,6 +305,7 @@ class TxtAdapter:
         char_count = 0
         last_boundary = 0
         byte_offset = 0
+        normalized_size = normalized.stat().st_size
 
         def append_chapter(end: int) -> None:
             nonlocal current_start, current_title
@@ -306,6 +328,10 @@ class TxtAdapter:
                 _check_cancel(signal)
                 line_start = byte_offset
                 byte_offset += len(raw_line)
+                on_progress(
+                    f"正在识别章节 {byte_offset} / {normalized_size} bytes",
+                    map_progress(45, 90, byte_offset, normalized_size),
+                )
                 line = raw_line.decode("utf-8").rstrip("\n")
                 if len(line_samples) < 500:
                     line_samples.append(line)
@@ -339,6 +365,7 @@ class TxtAdapter:
         unwrap_lines = bool(options.get("unwrap_lines", True))
 
         samples: List[Dict[str, str]] = []
+        on_progress("生成 TXT 预览", 95)
         with normalized.open("rb") as source:
             for index in sorted({0, len(chapters) // 2, len(chapters) - 1}):
                 item = chapters[index]
@@ -389,6 +416,7 @@ class TxtAdapter:
         (prepared_dir / "manifest.json").write_text(
             json.dumps(private, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+        on_progress("保存分析结果", 99)
         return public, private
 
     def iter_chapters(

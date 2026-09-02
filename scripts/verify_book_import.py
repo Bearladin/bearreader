@@ -12,6 +12,11 @@ import sqlmodel
 
 from lncrawl.context import ctx
 from lncrawl.dao import Chapter, Novel
+from lncrawl.services.imports.progress import (
+    map_progress,
+    progress_phase_key,
+    should_persist_progress,
+)
 from lncrawl.services.imports.txt import TxtAdapter, format_txt_body
 from lncrawl.services.scheduler.handlers.import_epub import (
     EpubAnalyzeHandler,
@@ -20,6 +25,40 @@ from lncrawl.services.scheduler.handlers.import_epub import (
 
 
 def _verify_adapter(root: Path) -> None:
+    assert map_progress(10, 85, 0, 2131) == 10
+    assert map_progress(10, 85, 2131, 2131) == 85
+    assert map_progress(50, 95, 1066, 2131) in {72, 73}
+    assert map_progress(10, 85, 1, 0) == 10
+    assert should_persist_progress(20, "扫描", 21, "扫描") is False
+    assert should_persist_progress(20, "扫描", 22, "扫描") is True
+    assert should_persist_progress(20, "扫描", 20, "保存") is True
+    assert should_persist_progress(98, "保存", 99, "保存") is True
+    assert progress_phase_key("正在整理章节 100 / 2131") == "正在整理章节"
+    assert (
+        should_persist_progress(
+            20,
+            "正在整理章节 90 / 2131",
+            21,
+            "正在整理章节 100 / 2131",
+        )
+        is False
+    )
+    persisted = 0
+    previous_percent = 0
+    previous_phase = "准备导入"
+    for current in range(1, 2132):
+        percent = map_progress(5, 50, current, 2131)
+        phase = f"正在整理章节 {current} / 2131"
+        if should_persist_progress(
+            previous_percent,
+            previous_phase,
+            percent,
+            phase,
+        ):
+            persisted += 1
+            previous_percent = percent
+            previous_phase = phase
+    assert persisted <= 25
     text = (
         "第一章 开始\r\n\r\n"
         "第一段硬换行\r\n继续。\r\n\r\n"
@@ -34,7 +73,7 @@ def _verify_adapter(root: Path) -> None:
             source,
             prepared,
             Event(),
-            lambda _phase: None,
+            lambda _phase, _percent: None,
             {"encoding": requested} if requested else {},
         )
         assert preview["source_format"] == "txt"

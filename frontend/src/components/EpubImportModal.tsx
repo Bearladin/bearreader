@@ -4,6 +4,12 @@ import type {
 } from '@/types';
 import { stringifyError } from '@/utils/errors';
 import {
+  IMPORT_MODAL_BODY_STYLE,
+  IMPORT_MODAL_TOP,
+  IMPORT_MODAL_WIDTH,
+  IMPORT_PREVIEW_STYLE,
+} from './BookImportModal/layout';
+import {
   CheckCircleOutlined,
   InboxOutlined,
   ReloadOutlined,
@@ -14,11 +20,13 @@ import {
   Alert,
   Button,
   Card,
+  Col,
   Descriptions,
   Divider,
   Input,
   Modal,
   Progress,
+  Row,
   Select,
   Space,
   Typography,
@@ -343,7 +351,9 @@ export const EpubImportModal: React.FC<{
     <Modal
       open={open}
       title="导入本地书籍"
-      width={560}
+      width={IMPORT_MODAL_WIDTH}
+      style={{ top: IMPORT_MODAL_TOP }}
+      styles={{ body: IMPORT_MODAL_BODY_STYLE }}
       destroyOnHidden
       footer={footer}
       onCancel={handleClose}
@@ -390,7 +400,8 @@ export const EpubImportModal: React.FC<{
       {session && active && (
         <Card variant="outlined">
           <Typography.Text strong>
-            正在分析 {session.original_name}
+            {session.status === 'committing' ? '正在导入' : '正在分析'}{' '}
+            {session.original_name}
           </Typography.Text>
           <Progress
             percent={Math.round(session.progress || 0)}
@@ -401,7 +412,9 @@ export const EpubImportModal: React.FC<{
             {session.phase || '正在准备分析……'}
           </Typography.Text>
           <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
-            分析可能需要一些时间，遇到复杂文件时请耐心等待。
+            {session.status === 'committing'
+              ? '正在整理并保存章节，请勿关闭应用。'
+              : '分析可能需要一些时间，遇到复杂文件时请耐心等待。'}
           </Typography.Paragraph>
         </Card>
       )}
@@ -429,73 +442,94 @@ export const EpubImportModal: React.FC<{
           />
           {session.source_format === 'txt' && (
             <Card size="small" title="TXT 排版设置">
-              <Space vertical style={{ width: '100%' }}>
-                <Typography.Text>文字编码</Typography.Text>
-                <Select
-                  value={txtEncoding}
-                  onChange={setTxtEncoding}
-                  options={Array.from(new Set([
-                    preview.encoding?.selected || 'utf-8',
-                    ...(preview.encoding?.candidates || []),
-                    'utf-8', 'gb18030', 'utf-16-le', 'utf-16-be',
-                  ])).map((value) => ({ value, label: value }))}
+              <Row gutter={[12, 10]} align="bottom">
+                <Col xs={24} sm={7} style={{ minWidth: 0 }}>
+                  <Space vertical size={5} style={{ width: '100%' }}>
+                    <Typography.Text>文字编码</Typography.Text>
+                    <Select
+                      value={txtEncoding}
+                      onChange={setTxtEncoding}
+                      style={{ width: '100%' }}
+                      options={Array.from(new Set([
+                        preview.encoding?.selected || 'utf-8',
+                        ...(preview.encoding?.candidates || []),
+                        'utf-8', 'gb18030', 'utf-16-le', 'utf-16-be',
+                      ])).map((value) => ({ value, label: value }))}
+                    />
+                  </Space>
+                </Col>
+                <Col xs={24} sm={10} style={{ minWidth: 0 }}>
+                  <Space vertical size={5} style={{ width: '100%' }}>
+                    <Typography.Text>段落整理</Typography.Text>
+                    <Select
+                      value={paragraphMode}
+                      onChange={setParagraphMode}
+                      style={{ width: '100%' }}
+                      options={[
+                        { value: 'auto', label: '自动判断' },
+                        { value: 'block', label: '空行分段' },
+                        { value: 'print', label: '首行缩进分段' },
+                        { value: 'single', label: '每行一段' },
+                        { value: 'unformatted', label: '保留原始换行' },
+                      ]}
+                    />
+                  </Space>
+                </Col>
+                <Col xs={24} sm={7}>
+                  <Button block onClick={handleReanalyze}>应用设置</Button>
+                </Col>
+              </Row>
+              {preview.encoding?.requires_confirmation && (
+                <Alert
+                  type="warning"
+                  showIcon
+                  title="编码识别结果不够确定，请选择编码并应用设置。"
+                  style={{ marginTop: 10 }}
                 />
-                <Typography.Text>段落整理</Typography.Text>
-                <Select
-                  value={paragraphMode}
-                  onChange={setParagraphMode}
-                  options={[
-                    { value: 'auto', label: '自动判断' },
-                    { value: 'block', label: '空行分段' },
-                    { value: 'print', label: '首行缩进分段' },
-                    { value: 'single', label: '每行一段' },
-                    { value: 'unformatted', label: '保留原始换行' },
-                  ]}
-                />
-                <Button onClick={handleReanalyze}>更新预览</Button>
-                {preview.encoding?.requires_confirmation && (
-                  <Alert type="warning" showIcon title="编码识别结果不够确定，请选择编码并更新预览。" />
-                )}
-              </Space>
+              )}
             </Card>
           )}
-          <div>
-            <Typography.Text strong>书名</Typography.Text>
-            <Input
-              value={title}
-              maxLength={200}
-              onChange={(event) => setTitle(event.target.value)}
-              style={{ marginTop: 5 }}
-            />
-          </div>
-          <div>
-            <Typography.Text strong>作者</Typography.Text>
-            <Input
-              value={authors}
-              maxLength={200}
-              onChange={(event) => setAuthors(event.target.value)}
-              style={{ marginTop: 5 }}
-            />
-          </div>
+          <Row gutter={[12, 12]}>
+            <Col xs={24} sm={15} style={{ minWidth: 0 }}>
+              <Typography.Text strong>书名</Typography.Text>
+              <Input
+                value={title}
+                maxLength={200}
+                onChange={(event) => setTitle(event.target.value)}
+                style={{ width: '100%', marginTop: 5 }}
+              />
+            </Col>
+            <Col xs={24} sm={9} style={{ minWidth: 0 }}>
+              <Typography.Text strong>作者</Typography.Text>
+              <Input
+                value={authors}
+                maxLength={200}
+                onChange={(event) => setAuthors(event.target.value)}
+                style={{ width: '100%', marginTop: 5 }}
+              />
+            </Col>
+          </Row>
           <div>
             <Typography.Text strong>目录与正文预览</Typography.Text>
             <Divider size="small" style={{ margin: '8px 0' }} />
-            {preview.samples.map((sample, index) => (
-              <Card
-                key={`${sample.title}-${index}`}
-                size="small"
-                title={sample.title}
-                style={{ marginTop: 8 }}
-              >
-                <Typography.Paragraph
-                  type="secondary"
-                  ellipsis={{ rows: 3, expandable: true, symbol: '展开' }}
-                  style={{ marginBottom: 0 }}
+            <div style={IMPORT_PREVIEW_STYLE}>
+              {preview.samples.map((sample, index) => (
+                <Card
+                  key={`${sample.title}-${index}`}
+                  size="small"
+                  title={sample.title}
+                  style={{ marginTop: 8 }}
                 >
-                  {sample.body_preview}
-                </Typography.Paragraph>
-              </Card>
-            ))}
+                  <Typography.Paragraph
+                    type="secondary"
+                    ellipsis={{ rows: 3, expandable: true, symbol: '展开' }}
+                    style={{ marginBottom: 0 }}
+                  >
+                    {sample.body_preview}
+                  </Typography.Paragraph>
+                </Card>
+              ))}
+            </div>
           </div>
         </Space>
       )}

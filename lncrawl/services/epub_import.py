@@ -8,10 +8,12 @@ import json
 import logging
 from pathlib import Path, PurePosixPath
 import posixpath
+import re
 import shutil
 import stat
 from threading import Event, Lock
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
+import unicodedata
 from urllib.parse import unquote, urlsplit
 import zipfile
 
@@ -26,6 +28,7 @@ from ..dao import Chapter, ChapterImage, ImportSession, Job, Novel, Volume
 from ..exceptions import AbortedException, ServerErrors
 from ..utils.text_tools import generate_uuid
 from ..utils.time_utils import current_timestamp
+from .imports.progress import ImportProgressCallback, map_progress
 
 logger = logging.getLogger(__name__)
 
@@ -372,6 +375,50 @@ def _image_jpeg(raw: bytes) -> Optional[bytes]:
         return None
 
 
+def _normalize_heading(text: str) -> str:
+    decoded = html.unescape(text)
+    normalized = unicodedata.normalize("NFC", decoded)
+    return " ".join(normalized.split())
+
+
+def _leading_title_cleanup(root: Any, expected_title: str) -> Tuple[Any, Any]:
+    from bs4 import Comment
+    from bs4.element import NavigableString, Tag
+
+    heading = root.find(["h1", "h2", "h3"])
+    if heading is None or _normalize_heading(
+        heading.get_text(" ", strip=True)
+    ) != _normalize_heading(expected_title):
+        return None, None
+
+    marker = None
+    for sibling in heading.previous_siblings:
+        if isinstance(sibling, Comment):
+            continue
+        if isinstance(sibling, NavigableString) and not str(sibling).strip():
+            continue
+        if isinstance(sibling, Tag) and marker is None:
+            hidden = str(sibling.get("aria-hidden") or "").lower()
+            text = sibling.get_text(" ", strip=True)
+            if hidden in {"true", "1"} and re.fullmatch(r"#\s*\d+", text):
+                marker = sibling
+                continue
+        return None, None
+
+    current = heading.parent
+    while current is not None and current is not root:
+        for sibling in current.previous_siblings:
+            if isinstance(sibling, Comment):
+                continue
+            if isinstance(sibling, NavigableString) and not str(sibling).strip():
+                continue
+            return None, None
+        current = current.parent
+    if current is not root:
+        return None, None
+    return heading, marker
+
+
 def _clean_html(
     raw: bytes,
     item_name: str,
@@ -379,12 +426,21 @@ def _clean_html(
     image_items: Dict[str, str],
     image_paths: Dict[str, str],
     prepared_images: Path,
+    expected_title: str = "",
+    strip_leading_title: bool = False,
+    strip_leading_marker: bool = False,
 ) -> Tuple[str, List[str]]:
     from bs4 import BeautifulSoup, Comment
 
     soup = BeautifulSoup(raw, "html.parser")
     root = soup.body or soup
     used_images: List[str] = []
+    if strip_leading_title:
+        heading, marker = _leading_title_cleanup(root, expected_title)
+        if heading is not None:
+            heading.decompose()
+            if strip_leading_marker and marker is not None:
+                marker.decompose()
     for comment in root.find_all(string=lambda value: isinstance(value, Comment)):
         comment.extract()
     for tag in list(root.find_all(_REMOVE_TAGS)):
@@ -757,15 +813,15 @@ class EpubParser:
         source_path: Path,
         prepared_dir: Path,
         signal: Event,
-        on_phase: Callable[[str], None],
+        on_progress: ImportProgressCallback,
     ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         prepared_dir.mkdir(parents=True, exist_ok=True)
 
-        on_phase("校验 EPUB 文件")
+        on_progress("校验 EPUB 文件", 1)
         names, opf_path = _validate_archive(source_path)
         _check_cancel(signal)
 
-        on_phase("读取书籍信息和目录")
+        on_progress("读取书籍信息和目录", 5)
         with zipfile.ZipFile(source_path) as archive:
             package = _package_index(archive, names, opf_path)
             metadata = package["metadata"]
@@ -799,15 +855,21 @@ class EpubParser:
             tags = metadata["tags"]
             synopsis = f"<p>{html.escape(str(descriptions[0]))}</p>" if descriptions else ""
 
-            on_phase("预检查正文内容")
+            on_progress("预检查正文内容", 10)
             sample_indices = {0, len(spine_names) // 2, len(spine_names) - 1}
             sample_text: Dict[str, str] = {}
             headings: Dict[str, str] = {}
+            cleanup_flags: Dict[str, Tuple[bool, bool]] = {}
             readable: List[str] = []
             from bs4 import BeautifulSoup
 
-            for index, item_name in enumerate(spine_names):
+            total_spine = len(spine_names)
+            for index, item_name in enumerate(spine_names, 1):
                 _check_cancel(signal)
+                on_progress(
+                    f"正在预检查正文 {index} / {total_spine}",
+                    map_progress(10, 85, index, total_spine),
+                )
                 raw = _read_zip_entry(archive, item_name, MAX_CHAPTER_BYTES)
                 soup = BeautifulSoup(raw, "html.parser")
                 root = soup.body or soup
@@ -826,19 +888,34 @@ class EpubParser:
                 heading_tag = root.find(["h1", "h2", "h3"])
                 if heading_tag:
                     headings[item_name] = heading_tag.get_text(" ", strip=True)
+                toc = toc_by_name.get(item_name)
+                expected_title = (toc.title if toc else "") or headings.get(item_name, "")
+                duplicate_heading, hidden_marker = _leading_title_cleanup(root, expected_title)
+                cleanup_flags[item_name] = (
+                    duplicate_heading is not None,
+                    hidden_marker is not None,
+                )
+                if duplicate_heading is not None:
+                    duplicate_heading.extract()
+                    if hidden_marker is not None:
+                        hidden_marker.extract()
                 text = root.get_text(" ", strip=True)
                 has_image = root.find(["img", "svg"]) is not None
                 if text or has_image:
                     readable.append(item_name)
-                    if index in sample_indices:
+                    if index - 1 in sample_indices:
                         sample_text[item_name] = text[:240]
 
-        on_phase("生成导入预览")
+        on_progress("生成导入预览", 85)
         chapters: List[Dict[str, Any]] = []
         volume_numbers: Dict[str, int] = {}
         volume_titles: Dict[int, str] = {}
-        for item_name in readable:
+        for index, item_name in enumerate(readable, 1):
             _check_cancel(signal)
+            on_progress(
+                f"正在生成预览索引 {index} / {len(readable)}",
+                map_progress(85, 95, index, len(readable)),
+            )
             toc = toc_by_name.get(item_name)
             chapter_title = (toc.title if toc else "") or headings.get(item_name, "")
             chapter_title = chapter_title or f"第 {len(chapters) + 1} 章"
@@ -858,6 +935,8 @@ class EpubParser:
                     "volume": volume_number,
                     "volume_title": volume_title,
                     "body_preview": sample_text.get(item_name, ""),
+                    "strip_leading_title": cleanup_flags.get(item_name, (False, False))[0],
+                    "strip_leading_marker": cleanup_flags.get(item_name, (False, False))[1],
                 }
             )
 
@@ -865,6 +944,12 @@ class EpubParser:
             raise EpubImportError(
                 "EPUB has no non-empty chapter bodies.",
                 "这个 EPUB 没有可读章节正文。",
+            )
+
+        duplicate_title_count = sum(bool(item["strip_leading_title"]) for item in chapters)
+        if duplicate_title_count:
+            warnings.append(
+                f"检测到 {duplicate_title_count} 章正文重复包含章节标题，导入时将隐藏重复标题。"
             )
 
         sample_chapters = [
@@ -930,6 +1015,7 @@ class EpubParser:
             json.dumps(manifest, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        on_progress("保存分析结果", 99)
         return preview, manifest
 
     def prepare_commit(
@@ -938,6 +1024,7 @@ class EpubParser:
         prepared_dir: Path,
         manifest: Dict[str, Any],
         signal: Event,
+        on_progress: ImportProgressCallback,
     ) -> Dict[str, Any]:
         prepared_images = prepared_dir / "images"
         prepared_chapters = prepared_dir / "chapters"
@@ -984,8 +1071,13 @@ class EpubParser:
                         cover_path = "cover.jpg"
                         (prepared_dir / cover_path).write_bytes(converted_cover)
 
-            for source_item in manifest.get("chapters_data") or []:
+            source_chapters = manifest.get("chapters_data") or []
+            for index, source_item in enumerate(source_chapters, 1):
                 _check_cancel(signal)
+                on_progress(
+                    f"正在整理章节 {index} / {len(source_chapters)}",
+                    map_progress(5, 50, index, len(source_chapters)),
+                )
                 item = dict(source_item)
                 archive_name = str(item["archive_name"])
                 raw = _read_zip_entry(archive, archive_name, MAX_CHAPTER_BYTES)
@@ -996,6 +1088,9 @@ class EpubParser:
                     image_items,
                     image_paths,
                     prepared_images,
+                    expected_title=str(item.get("title") or ""),
+                    strip_leading_title=bool(item.get("strip_leading_title")),
+                    strip_leading_marker=bool(item.get("strip_leading_marker")),
                 )
                 if not body:
                     continue
@@ -1306,7 +1401,7 @@ class EpubImportService:
         self,
         session_id: str,
         signal: Event,
-        on_phase: Callable[[str], None],
+        on_progress: ImportProgressCallback,
     ) -> None:
         session = self._get_by_id(session_id)
         if session.status != "analyzing":
@@ -1324,9 +1419,11 @@ class EpubImportService:
                 if options_path.is_file()
                 else {}
             )
-            preview, _manifest = TxtAdapter().analyze(path, prepared_dir, signal, on_phase, options)
+            preview, _manifest = TxtAdapter().analyze(
+                path, prepared_dir, signal, on_progress, options
+            )
         else:
-            preview, _manifest = EpubParser().analyze(path, prepared_dir, signal, on_phase)
+            preview, _manifest = EpubParser().analyze(path, prepared_dir, signal, on_progress)
         _check_cancel(signal)
         if len(json.dumps(preview, ensure_ascii=False).encode("utf-8")) > MAX_PUBLIC_PREVIEW_BYTES:
             raise EpubImportError("The EPUB preview exceeds the supported size limit.")
@@ -1509,11 +1606,12 @@ class EpubImportService:
         title: str,
         authors: str,
         signal: Event,
+        on_progress: ImportProgressCallback,
     ) -> str:
         while not self._commit_lock.acquire(timeout=0.25):
             _check_cancel(signal)
         try:
-            return self._commit_session(session_id, title, authors, signal)
+            return self._commit_session(session_id, title, authors, signal, on_progress)
         finally:
             self._commit_lock.release()
 
@@ -1547,8 +1645,10 @@ class EpubImportService:
         title: str,
         authors: str,
         signal: Event,
+        on_progress: ImportProgressCallback,
     ) -> str:
         session = self._get_by_id(session_id)
+        on_progress("准备导入", 1)
         if session.status == "completed" and session.novel_id:
             return session.novel_id
         if session.status != "committing":
@@ -1586,7 +1686,14 @@ class EpubImportService:
             chapter_items: List[Dict[str, Any]] = []
             volume_numbers: Dict[str, int] = {}
             volume_titles: Dict[int, str] = {}
-            for imported in TxtAdapter().iter_chapters(prepared_dir, manifest, signal):
+            source_chapters = manifest.get("chapters") or []
+            for index, imported in enumerate(
+                TxtAdapter().iter_chapters(prepared_dir, manifest, signal), 1
+            ):
+                on_progress(
+                    f"正在整理章节 {index} / {len(source_chapters)}",
+                    map_progress(5, 50, index, len(source_chapters)),
+                )
                 volume_title = str(imported.get("volume_title") or "正文")
                 if volume_title not in volume_numbers:
                     volume_number = len(volume_numbers) + 1
@@ -1630,6 +1737,7 @@ class EpubImportService:
                 prepared_dir,
                 manifest,
                 signal,
+                on_progress,
             )
 
         novel_id = session.novel_id or self._reserve_novel_id(session_id)
@@ -1668,8 +1776,13 @@ class EpubImportService:
             }
             chapters: List[Chapter] = []
             images: List[ChapterImage] = []
-            for item in manifest.get("chapters_data") or []:
+            prepared_chapters = manifest.get("chapters_data") or []
+            for index, item in enumerate(prepared_chapters, 1):
                 _check_cancel(signal)
+                on_progress(
+                    f"正在保存章节 {index} / {len(prepared_chapters)}",
+                    map_progress(50, 95, index, len(prepared_chapters)),
+                )
                 serial = int(item["serial"])
                 chapter = Chapter(
                     id=generate_uuid(),
@@ -1733,6 +1846,8 @@ class EpubImportService:
             )
 
             _check_cancel(signal)
+            on_progress("正在写入书库", 97)
+            on_progress("正在写入书库", 99)
             with ctx.db.session() as sess:
                 current_session = sess.get(ImportSession, session_id)
                 if current_session is None:

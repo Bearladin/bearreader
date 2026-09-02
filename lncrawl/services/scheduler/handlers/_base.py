@@ -86,6 +86,21 @@ class BaseHandler(ABC):
         ctx.job_notifier.notify(self.user, self.job)
         return True
 
+    def _set_progress(self, done: int, **extra: Any) -> bool:
+        with ctx.db.session() as sess:
+            current = sess.get_one(Job, self.job.id)
+            target = max(current.done, min(int(done), max(0, current.total - 1)))
+            if target > current.done:
+                ctx.jobs._increment_up(sess, self.job.id, target - current.done)
+            if extra:
+                merged = ctx.jobs._get_extra(sess, self.job.id, extra)
+                ctx.jobs._update(sess, self.job.id, extra=merged)
+            sess.commit()
+            self.job = sess.get_one(Job, self.job.id)
+
+        ctx.job_notifier.notify(self.user, self.job)
+        return True
+
     def _set_success(self) -> bool:
         with ctx.db.session() as sess:
             ctx.jobs._success(sess, self.job.id)

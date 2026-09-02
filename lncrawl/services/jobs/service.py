@@ -242,7 +242,7 @@ class JobService:
                 "phase": "准备分析",
             },
             type=JobType.IMPORT_EPUB_ANALYZE,
-            total=5,
+            total=100,
         )
 
     def import_epub_commit(
@@ -261,6 +261,7 @@ class JobService:
                 "phase": "准备导入",
             },
             type=JobType.IMPORT_EPUB_COMMIT,
+            total=100,
         )
 
     def import_txt_analysis(
@@ -280,7 +281,7 @@ class JobService:
                 "phase": "准备分析",
             },
             type=JobType.IMPORT_TXT_ANALYZE,
-            total=5,
+            total=100,
         )
 
     def import_txt_commit(
@@ -300,6 +301,7 @@ class JobService:
                 "phase": "准备导入",
             },
             type=JobType.IMPORT_TXT_COMMIT,
+            total=100,
         )
 
     def fetch_many_novels(
