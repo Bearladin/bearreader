@@ -7,7 +7,7 @@ from typing import Callable, Dict, Optional, Set
 from ...context import ctx
 from ...dao import Artifact, LanguageCode, OutputFormat
 from ...exceptions import ServerErrors
-from ...utils.file_tools import safe_filename
+from ...utils.file_tools import safe_display_filename
 from .calibre import convert_epub, is_calibre_available
 from .epub import make_epub
 from .json import make_json
@@ -74,7 +74,11 @@ class BinderService:
         if not callable(make):
             raise ServerErrors.format_not_available
 
-        file_name = safe_filename(novel_title).title()
+        # Human-readable export name: keeps readable CJK text (NFC, Windows-
+        # forbidden characters stripped, 50-char stem budget with a hash
+        # suffix for longer titles). Volume/language/extension live outside
+        # the stem budget. Previously slugified to Pinyin (safe_filename).
+        file_name = safe_display_filename(novel_title)
         if volume is not None:
             file_name += f".Vol_{volume:03}"
         if language:

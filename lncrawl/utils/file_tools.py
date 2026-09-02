@@ -1,11 +1,14 @@
 from contextlib import contextmanager
+import hashlib
 import logging
 import os
 from pathlib import Path
+import re
 import shlex
 import subprocess
 import tempfile
 from typing import Iterator, Union
+import unicodedata
 
 from slugify import slugify
 
@@ -119,6 +122,29 @@ def safe_filename(name: str) -> str:
     if name.upper() in _WINDOWS_RESERVED:
         name = f"_{name}"
     return name or "untitled"
+
+
+def safe_display_filename(name: str, max_stem: int = 50) -> str:
+    """Clean a book title for use as a human-readable export filename stem.
+
+    Unlike :func:`safe_filename` (slugified, Pinyin/ASCII output), this keeps
+    the readable Chinese text: NFC normalization, Windows-forbidden characters
+    and control characters removed, edges trimmed. Stems longer than
+    ``max_stem`` are truncated to the first ``max_stem - 10`` characters plus
+    an ``…-<sha1[:8]>`` suffix so distinct long titles stay distinguishable
+    while the stem stays within the budget (volume/language/extension are
+    appended outside this budget). Reserved device names are prefixed.
+    """
+    name = unicodedata.normalize("NFC", name)
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1F\x7F]', "", name)
+    name = name.strip(" .") or "untitled"
+    if name.upper() in _WINDOWS_RESERVED:
+        name = f"_{name}"
+    if len(name) > max_stem:
+        digest = hashlib.sha1(name.encode("utf-8")).hexdigest()[:8]
+        keep = max_stem - 10
+        name = f"{name[:keep]}…-{digest}"
+    return name
 
 
 def open_folder(folder_path: Union[str, Path]) -> None:

@@ -137,7 +137,9 @@ async def _verify_lifecycle() -> None:
 def main() -> None:
     previous = os.environ.get("XIAOXIONG_NOVEL_DATA_PATH")
     try:
-        with TemporaryDirectory(prefix="bearreader-book-verifier-", ignore_cleanup_errors=True) as temporary:
+        with TemporaryDirectory(
+            prefix="bearreader-book-verifier-", ignore_cleanup_errors=True
+        ) as temporary:
             root = Path(temporary)
             _verify_adapter(root)
             os.environ["XIAOXIONG_NOVEL_DATA_PATH"] = str(root / "data")
