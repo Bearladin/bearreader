@@ -13,6 +13,39 @@ interface ChangeEntry {
 
 const entries: ChangeEntry[] = [
   {
+    version: '1.3.2',
+    date: '2026-09-02',
+    items: [
+      <span key="local-import">
+        本地书籍导入：支持拖拽或选择导入 EPUB 与 TXT。EPUB 自动提取封面、卷章结构与插图；TXT 支持编码确认、章节识别和五种段落整理方式；导入前可预览并编辑书名/作者。
+      </span>,
+      <span key="import-safety">
+        导入过程安全可控：限制文件与解压体积、拒绝音视频和脚本内容、按需读取正文与插图，弹窗显示真实进度；上传失败与取消状态可靠恢复。
+      </span>,
+      <span key="close-confirm">
+        关闭窗口前弹出确认：点右上角关闭或键盘快捷键关窗时会先确认再退出，防止误触中断阅读或任务；「阅读设置」内可关闭此确认。
+      </span>,
+      <span key="chinese-filename">
+        导出文件名改为可读中文：电子书文件以书名命名（如「书名.epub」），超长书名自动截断并附加识别后缀。
+      </span>,
+      <span key="window-title">
+        窗口标题栏版本号与实际版本同步（此前一直显示 v1.2.4）。
+      </span>,
+      <span key="app-slim">
+        应用数据目录不再虚胖：应用窗口不再累积浏览器组件缓存，可节省数百 MB 磁盘空间。
+      </span>,
+      <span key="exit-hardening">
+        退出与启动更可靠：异常退出后最长 2 分钟自动恢复可启动并弹窗提示；旧版本遗留的卡死任务自动清理；损坏的数据库不再导致书源列表加载失败。
+      </span>,
+      <span key="startup-diagnostics">
+        中文路径与特殊字符路径下启动更可靠，启动失败会写入诊断日志便于排查。
+      </span>,
+      <span key="ui-polish">
+        界面细节：浏览器不再提示翻译本应用；导入弹窗布局紧凑；更新日志单页可显示更多条目；任务详情返回链接改为「上级任务请求」；前端分包加载失败可自恢复。
+      </span>,
+    ],
+  },
+  {
     version: '1.3.1',
     date: '2026-08-31',
     items: [
@@ -59,10 +92,10 @@ const entries: ChangeEntry[] = [
   },
 ];
 
-// 摊平为单条记录列表（最新在前）。只有条目多到一页放不下时才分页，
-// 每页固定 10 条、最多 5 页，超出 5 页的早期历史不再展示。
-const PAGE_SIZE = 10;
-const MAX_PAGES = 5;
+// 摊平为单条记录列表（最新在前）。单页 25 条可让近期全部版本一屏展示
+// （早期 10 条时页面下半空白明显）；超出的旧历史分页兜底，上限 200 条。
+const PAGE_SIZE = 25;
+const MAX_PAGES = 8;
 const MAX_ITEMS = PAGE_SIZE * MAX_PAGES;
 
 const flatEntries = entries.flatMap((entry) =>
