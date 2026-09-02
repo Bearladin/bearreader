@@ -1,6 +1,6 @@
 {
-  "frontend_tree_digest": "db0ddc4bcd5e7e3b0a4de882138e947f5942d749914f898621632fc794039365",
-  "build_digest": "bb5783ae96d182c1a014e6d456630e1d7820664f24b47c60f20a8bd210530a49",
+  "frontend_tree_digest": "8b97229fc00a9ca9ee3ec9853b1acaf78bb4579c008351a0ff63f5ee8faf9d66",
+  "build_digest": "5fa6a579a767373228ac9d6ebd2da0030138e576050aacfb7ca890d26ec4621f",
   "node_version": "v24.19.0",
   "yarn_version": "1.22.22",
   "vite_version": "^6.4.1"

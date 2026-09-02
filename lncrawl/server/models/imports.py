@@ -19,8 +19,16 @@ class EpubImportCommitRequest(BaseModel):
     authors: Optional[str] = Field(default=None, max_length=200, description="Author override")
 
 
+class TxtReanalyzeRequest(BaseModel):
+    encoding: Optional[str] = Field(default=None, max_length=50)
+    paragraph_mode: str = Field(default="auto", pattern="^(auto|block|print|single|unformatted)$")
+    unwrap_lines: bool = True
+    chapter_pattern: Optional[str] = Field(default=None, max_length=500)
+
+
 class EpubImportSessionResponse(BaseModel):
     id: str
+    source_format: str = "epub"
     status: str
     original_name: str
     file_size: int

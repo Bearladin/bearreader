@@ -25,6 +25,13 @@ export const copy = {
     sources: '书源',
     settings: '设置',
   },
+  routeError: {
+    preloadTitle: '应用资源加载失败',
+    preloadDescription: '自动恢复未成功。请完全退出 BearReader，然后重新打开。',
+    genericTitle: '页面加载失败',
+    genericDescription: '加载页面时发生错误，请重新加载后再试。',
+    reload: '重新加载',
+  },
 } as const;
 
 export const enumLabels = {
@@ -55,6 +62,8 @@ export const enumLabels = {
     [JobType.FETCH_LATEST]: '检查更新并补全',
     [JobType.IMPORT_EPUB_ANALYZE]: '分析 EPUB',
     [JobType.IMPORT_EPUB_COMMIT]: '导入 EPUB',
+    [JobType.IMPORT_TXT_ANALYZE]: '分析 TXT',
+    [JobType.IMPORT_TXT_COMMIT]: '导入 TXT',
     [JobType.NOVEL_TRANSLATION]: '翻译小说',
     [JobType.NOVEL_TRANSLATION_BATCH]: '批量翻译小说',
     [JobType.FULL_NOVEL_TRANSLATION]: '翻译完整小说',

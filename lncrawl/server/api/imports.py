@@ -8,6 +8,7 @@ from ...server.models import (
     EpubImportCommitRequest,
     EpubImportSessionResponse,
     EpubImportStartResponse,
+    TxtReanalyzeRequest,
 )
 from ..security import ensure_user
 
@@ -56,3 +57,55 @@ def cancel_epub_import(
 ) -> bool:
     ctx.epub_import.cancel(session_id, user)
     return True
+
+
+@router.post("/txt", response_model=EpubImportStartResponse)
+async def start_txt_import(
+    file: UploadFile = File(...),
+    user: User = Security(ensure_user),
+) -> EpubImportStartResponse:
+    result = await ctx.epub_import.start_txt_upload(user, file)
+    return EpubImportStartResponse(**result)
+
+
+@router.get("/{session_id}", response_model=EpubImportSessionResponse)
+def get_book_import(
+    session_id: str = Path(),
+    user: User = Security(ensure_user),
+) -> EpubImportSessionResponse:
+    return EpubImportSessionResponse(**ctx.epub_import.session_view(session_id, user))
+
+
+@router.post("/{session_id}/commit", response_model=EpubImportStartResponse)
+def commit_book_import(
+    session_id: str = Path(),
+    body: Optional[EpubImportCommitRequest] = Body(default=None),
+    user: User = Security(ensure_user),
+) -> EpubImportStartResponse:
+    title = body.title if body and body.title is not None else ""
+    authors = body.authors if body and body.authors is not None else ""
+    job = ctx.epub_import.claim_commit(session_id, user, title, authors)
+    return EpubImportStartResponse(session_id=session_id, job_id=job.id)
+
+
+@router.post("/{session_id}/cancel")
+def cancel_book_import(
+    session_id: str = Path(),
+    user: User = Security(ensure_user),
+) -> bool:
+    ctx.epub_import.cancel(session_id, user)
+    return True
+
+
+@router.post("/{session_id}/reanalyze", response_model=EpubImportStartResponse)
+def reanalyze_txt_import(
+    session_id: str = Path(),
+    body: TxtReanalyzeRequest = Body(),
+    user: User = Security(ensure_user),
+) -> EpubImportStartResponse:
+    job = ctx.epub_import.reanalyze_txt(
+        session_id,
+        user,
+        body.model_dump(exclude_none=True),
+    )
+    return EpubImportStartResponse(session_id=session_id, job_id=job.id)

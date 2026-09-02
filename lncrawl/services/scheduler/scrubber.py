@@ -24,7 +24,7 @@ class Scrubber:
         scrubber.free_disk_space()
         scrubber.delete_old_jobs()
         scrubber.cancel_long_jobs()
-        ctx.epub_import.cleanup_expired()
+        ctx.book_import.cleanup_expired()
         scrubber.delete_expired_tokens()
         scrubber.delete_inactive_users()
         scrubber.delete_old_activities()

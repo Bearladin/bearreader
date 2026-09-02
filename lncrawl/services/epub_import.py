@@ -15,7 +15,6 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from urllib.parse import unquote, urlsplit
 import zipfile
 
-import ebooklib
 from ebooklib import epub
 from fastapi import UploadFile
 from lxml import etree
@@ -30,8 +29,8 @@ from ..utils.time_utils import current_timestamp
 
 logger = logging.getLogger(__name__)
 
-MAX_UPLOAD_BYTES = 100 * 1024 * 1024
-MAX_UNCOMPRESSED_BYTES = 500 * 1024 * 1024
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+MAX_UNCOMPRESSED_BYTES = 100 * 1024 * 1024
 MAX_ZIP_ENTRIES = 10_000
 MAX_ENTRY_BYTES = 50 * 1024 * 1024
 MAX_CHAPTER_BYTES = 10 * 1024 * 1024
@@ -45,6 +44,45 @@ IMPORT_URL_PREFIX = "local-import://sha256/"
 _PENDING_NOVEL_MARKER = ".epub-import-pending"
 _ACTIVE_SESSION_STATUSES = frozenset({"analyzing", "ready", "committing"})
 _CHUNK_SIZE = 1024 * 1024
+MAX_PUBLIC_PREVIEW_BYTES = 32 * 1024
+MAX_PREVIEW_WARNINGS = 20
+_REJECTED_MEDIA_PREFIXES = ("audio/", "video/")
+_REJECTED_MEDIA_TYPES = {
+    "application/smil+xml",
+    "application/javascript",
+    "text/javascript",
+}
+_REJECTED_EXTENSIONS = {
+    ".aac",
+    ".avi",
+    ".flac",
+    ".js",
+    ".m4a",
+    ".m4v",
+    ".mov",
+    ".mp3",
+    ".mp4",
+    ".ogg",
+    ".smil",
+    ".wav",
+    ".webm",
+}
+_REJECTED_MARKUP_TAGS = {
+    "audio",
+    "video",
+    "source",
+    "track",
+    "script",
+    "object",
+    "embed",
+    "iframe",
+}
+_SUPPORTED_IMAGE_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+}
 
 _ALLOWED_TAGS = {
     "a",
@@ -337,7 +375,8 @@ def _image_jpeg(raw: bytes) -> Optional[bytes]:
 def _clean_html(
     raw: bytes,
     item_name: str,
-    image_items: Dict[str, Any],
+    archive: zipfile.ZipFile,
+    image_items: Dict[str, str],
     image_paths: Dict[str, str],
     prepared_images: Path,
 ) -> Tuple[str, List[str]]:
@@ -350,6 +389,13 @@ def _clean_html(
         comment.extract()
     for tag in list(root.find_all(_REMOVE_TAGS)):
         tag.decompose()
+
+    for svg in list(root.find_all("svg")):
+        image = svg.find("image")
+        href = str((image.get("href") or image.get("xlink:href") or "") if image else "").strip()
+        replacement = soup.new_tag("img")
+        replacement["src"] = href
+        svg.replace_with(replacement)
 
     for tag in list(root.find_all(True)):
         name = str(tag.name).lower()
@@ -373,9 +419,32 @@ def _clean_html(
             if resource_name is None:
                 tag.decompose()
                 continue
-            image_item = image_items[resource_name]
+            media_type = image_items[resource_name]
+            if media_type == "image/svg+xml":
+                svg_root = _parse_xml(_read_zip_entry(archive, resource_name, MAX_XML_BYTES))
+                references = []
+                for element in svg_root.iter():
+                    if _local_name(element.tag).lower() != "image":
+                        continue
+                    href = str(
+                        element.attrib.get("href")
+                        or element.attrib.get("{http://www.w3.org/1999/xlink}href")
+                        or ""
+                    ).strip()
+                    matched = _match_name(
+                        href,
+                        image_items.keys(),
+                        posixpath.dirname(resource_name),
+                    )
+                    if matched and image_items.get(matched) in _SUPPORTED_IMAGE_TYPES:
+                        references.append(matched)
+                references = list(dict.fromkeys(references))
+                if len(references) != 1:
+                    tag.decompose()
+                    continue
+                resource_name = references[0]
             if resource_name not in image_paths:
-                converted = _image_jpeg(image_item.get_content())
+                converted = _image_jpeg(_read_zip_entry(archive, resource_name, MAX_IMAGE_BYTES))
                 if converted is None:
                     tag.decompose()
                     continue
@@ -454,6 +523,234 @@ def _validate_archive(path: Path) -> Tuple[set[str], str]:
         raise EpubImportError("EPUB package files are incomplete.") from error
 
 
+def _read_zip_entry(
+    archive: zipfile.ZipFile,
+    name: str,
+    limit: int,
+) -> bytes:
+    info = archive.getinfo(name)
+    if info.file_size > limit:
+        raise EpubImportError(f"EPUB entry exceeds its read limit: {name}")
+    chunks: List[bytes] = []
+    total = 0
+    with archive.open(info) as stream:
+        while True:
+            chunk = stream.read(min(_CHUNK_SIZE, limit - total + 1))
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > limit:
+                raise EpubImportError(f"EPUB entry exceeds its read limit: {name}")
+            chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _opf_values(root: Any, local_name: str) -> List[str]:
+    values: List[str] = []
+    for element in root.iter():
+        if _local_name(element.tag).lower() != local_name.lower():
+            continue
+        value = " ".join(str(element.text or "").split())
+        if value:
+            values.append(value)
+    return values
+
+
+def _nav_toc(
+    archive: zipfile.ZipFile,
+    nav_name: str,
+    names: set[str],
+) -> Dict[str, _TocEntry]:
+    from bs4 import BeautifulSoup
+
+    raw = _read_zip_entry(archive, nav_name, MAX_CHAPTER_BYTES)
+    soup = BeautifulSoup(raw, "html.parser")
+    nav = next(
+        (
+            item
+            for item in soup.find_all("nav")
+            if "toc" in str(item.get("epub:type") or item.get("type") or "").lower().split()
+        ),
+        None,
+    )
+    nav = nav or soup.find("nav")
+    if nav is None:
+        return {}
+
+    result: Dict[str, _TocEntry] = {}
+    base_dir = posixpath.dirname(nav_name)
+
+    def walk(list_tag: Any, volume: Optional[str] = None) -> None:
+        for item in list_tag.find_all("li", recursive=False):
+            link = item.find("a", recursive=False)
+            nested = item.find(["ol", "ul"], recursive=False)
+            title = link.get_text(" ", strip=True) if link else ""
+            if nested is not None:
+                walk(nested, title or volume)
+                continue
+            href = str(link.get("href") or "") if link else ""
+            matched = _match_name(href, names, base_dir)
+            if matched and matched not in result:
+                result[matched] = _TocEntry(
+                    href=href,
+                    title=title,
+                    volume=volume,
+                )
+
+    root_list = nav.find(["ol", "ul"])
+    if root_list is not None:
+        walk(root_list)
+    return result
+
+
+def _ncx_toc(
+    archive: zipfile.ZipFile,
+    ncx_name: str,
+    names: set[str],
+) -> Dict[str, _TocEntry]:
+    root = _parse_xml(
+        _read_zip_entry(archive, ncx_name, MAX_XML_BYTES),
+        allow_doctype=True,
+    )
+    result: Dict[str, _TocEntry] = {}
+    base_dir = posixpath.dirname(ncx_name)
+
+    def children(node: Any, name: str) -> List[Any]:
+        return [child for child in node if _local_name(child.tag) == name]
+
+    def label(node: Any) -> str:
+        for nav_label in children(node, "navLabel"):
+            for text_node in nav_label.iter():
+                if _local_name(text_node.tag) == "text":
+                    return " ".join(str(text_node.text or "").split())
+        return ""
+
+    def walk(node: Any, volume: Optional[str] = None) -> None:
+        for point in children(node, "navPoint"):
+            title = label(point)
+            nested = children(point, "navPoint")
+            if nested:
+                walk(point, title or volume)
+                continue
+            content = next(iter(children(point, "content")), None)
+            href = str(content.attrib.get("src") or "") if content is not None else ""
+            matched = _match_name(href, names, base_dir)
+            if matched and matched not in result:
+                result[matched] = _TocEntry(
+                    href=href,
+                    title=title,
+                    volume=volume,
+                )
+
+    nav_map = next(
+        (element for element in root.iter() if _local_name(element.tag) == "navMap"),
+        None,
+    )
+    if nav_map is not None:
+        walk(nav_map)
+    return result
+
+
+def _package_index(
+    archive: zipfile.ZipFile,
+    names: set[str],
+    opf_path: str,
+) -> Dict[str, Any]:
+    opf = _parse_xml(_read_zip_entry(archive, opf_path, MAX_XML_BYTES))
+    opf_dir = posixpath.dirname(opf_path)
+    items: Dict[str, Dict[str, Any]] = {}
+    for element in opf.iter():
+        if _local_name(element.tag) != "item":
+            continue
+        item_id = str(element.attrib.get("id") or "")
+        href = str(element.attrib.get("href") or "")
+        if not item_id or not href:
+            continue
+        archive_name = _match_name(href, names, opf_dir)
+        if archive_name is None:
+            continue
+        media_type = str(element.attrib.get("media-type") or "").lower()
+        suffix = Path(archive_name).suffix.lower()
+        if media_type.startswith(_REJECTED_MEDIA_PREFIXES) or suffix in {
+            ".aac",
+            ".avi",
+            ".flac",
+            ".m4a",
+            ".m4v",
+            ".mov",
+            ".mp3",
+            ".mp4",
+            ".ogg",
+            ".wav",
+            ".webm",
+        }:
+            raise EpubImportError(
+                "EPUB contains audio or video resources.",
+                "EPUB 包含音频或视频内容，仅支持文字和静态插图。",
+            )
+        if media_type in _REJECTED_MEDIA_TYPES or suffix in {".js", ".smil"}:
+            raise EpubImportError(
+                "EPUB contains scripted or interactive resources.",
+                "EPUB 包含脚本或交互内容，无法安全导入。",
+            )
+        if element.attrib.get("media-overlay"):
+            raise EpubImportError(
+                "EPUB contains a media overlay.",
+                "EPUB 包含音频或视频内容，仅支持文字和静态插图。",
+            )
+        items[item_id] = {
+            "archive_name": archive_name,
+            "media_type": media_type,
+            "properties": sorted(set(str(element.attrib.get("properties") or "").split())),
+        }
+
+    spine = next(
+        (element for element in opf.iter() if _local_name(element.tag) == "spine"),
+        None,
+    )
+    if spine is None:
+        raise EpubImportError("EPUB package has no spine.", "这个 EPUB 没有可读章节。")
+    spine_ids: List[str] = []
+    for itemref in spine:
+        if _local_name(itemref.tag) != "itemref":
+            continue
+        if str(itemref.attrib.get("linear") or "yes").lower() == "no":
+            continue
+        item_id = str(itemref.attrib.get("idref") or "")
+        item = items.get(item_id)
+        if item is None or "nav" in item["properties"]:
+            continue
+        if item["media_type"] not in {"application/xhtml+xml", "text/html"}:
+            continue
+        spine_ids.append(item_id)
+
+    nav_item = next(
+        (item for item in items.values() if "nav" in item["properties"]),
+        None,
+    )
+    toc_by_name: Dict[str, _TocEntry] = {}
+    if nav_item is not None:
+        toc_by_name = _nav_toc(archive, nav_item["archive_name"], names)
+    if not toc_by_name:
+        toc_id = str(spine.attrib.get("toc") or "")
+        toc_item = items.get(toc_id)
+        if toc_item is not None:
+            toc_by_name = _ncx_toc(archive, toc_item["archive_name"], names)
+
+    return {
+        "metadata": {
+            "title": (_opf_values(opf, "title") or [""])[0],
+            "authors": ", ".join(_opf_values(opf, "creator")),
+            "language": _normalize_language((_opf_values(opf, "language") or [""])[0]),
+            "descriptions": _opf_values(opf, "description"),
+            "tags": _opf_values(opf, "subject")[:50],
+        },
+        "items": items,
+        "spine_ids": spine_ids,
+        "toc_by_name": toc_by_name,
+    }
+
+
 class EpubParser:
     def analyze(
         self,
@@ -461,105 +758,89 @@ class EpubParser:
         prepared_dir: Path,
         signal: Event,
         on_phase: Callable[[str], None],
-    ) -> Dict[str, Any]:
+    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         prepared_dir.mkdir(parents=True, exist_ok=True)
-        prepared_images = prepared_dir / "images"
-        prepared_chapters = prepared_dir / "chapters"
-        prepared_images.mkdir()
-        prepared_chapters.mkdir()
 
         on_phase("校验 EPUB 文件")
         names, opf_path = _validate_archive(source_path)
-        opf_dir = posixpath.dirname(opf_path)
         _check_cancel(signal)
 
-        on_phase("读取书籍信息和封面")
-        manifest_properties = _manifest_properties(source_path, opf_path)
-        toc_base_dir = _toc_base_dir(source_path, opf_path, names)
-        try:
-            book = epub.read_epub(str(source_path))
-        except Exception as error:
-            raise EpubImportError("ebooklib could not read the EPUB package.") from error
-        title = (_metadata(book, "DC", "title") or [""])[0]
-        authors = ", ".join(_metadata(book, "DC", "creator"))
-        language = _normalize_language((_metadata(book, "DC", "language") or [""])[0])
-        descriptions = _metadata(book, "DC", "description")
-        tags = _metadata(book, "DC", "subject")
-        synopsis = f"<p>{html.escape(descriptions[0])}</p>" if descriptions else ""
+        on_phase("读取书籍信息和目录")
+        with zipfile.ZipFile(source_path) as archive:
+            package = _package_index(archive, names, opf_path)
+            metadata = package["metadata"]
+            items = package["items"]
+            toc_by_name = package["toc_by_name"]
+            spine_names = [items[item_id]["archive_name"] for item_id in package["spine_ids"]]
+            if not spine_names:
+                raise EpubImportError(
+                    "EPUB has no readable spine documents.",
+                    "这个 EPUB 没有可读章节。",
+                )
 
-        image_items: Dict[str, Any] = {}
-        for item in book.get_items():
-            if item.get_type() not in {ebooklib.ITEM_IMAGE, ebooklib.ITEM_COVER}:
-                continue
-            item_name = _match_name(str(item.get_name()), names, opf_dir)
-            if item_name:
-                image_items[item_name] = item
-        cover_name = _cover_name(source_path, set(names))
-        cover_path: Optional[str] = None
-        if cover_name and cover_name in image_items:
-            cover = _image_jpeg(image_items[cover_name].get_content())
-            if cover is not None:
-                cover_path = "cover.jpg"
-                (prepared_dir / cover_path).write_bytes(cover)
-
-        on_phase("读取目录与章节")
-        toc_entries = _flatten_toc(book.toc)
-        toc_by_name: Dict[str, _TocEntry] = {}
-        for entry in toc_entries:
-            matched = _match_name(entry.href, names, toc_base_dir)
-            if matched is None and toc_base_dir != opf_dir:
-                matched = _match_name(entry.href, names, opf_dir)
-            if matched and matched not in toc_by_name:
-                toc_by_name[matched] = entry
-
-        spine_items: List[Tuple[str, Any]] = []
-        for idref, linear in book.spine:
-            if str(linear).lower() == "no":
-                continue
-            item = book.get_item_with_id(idref)
-            if item is None or item.get_type() != ebooklib.ITEM_DOCUMENT:
-                continue
-            if "nav" in manifest_properties.get(str(idref), set()):
-                continue
-            item_name = _match_name(str(item.get_name()), names, opf_dir)
-            if item_name:
-                spine_items.append((item_name, item))
-        if not spine_items:
-            raise EpubImportError(
-                "EPUB has no readable spine documents.",
-                "这个 EPUB 没有可读章节。",
+            image_items = {
+                item["archive_name"]: item["media_type"]
+                for item in items.values()
+                if item["media_type"] in _SUPPORTED_IMAGE_TYPES
+                or item["media_type"] == "image/svg+xml"
+            }
+            svg_count = sum(
+                1 for media_type in image_items.values() if media_type == "image/svg+xml"
             )
+            warnings: List[str] = []
+            if svg_count:
+                warnings.append(f"检测到 {svg_count} 个 SVG 插图；仅导入引用普通位图的安全外壳。")
 
-        on_phase("清理正文和图片")
-        image_paths: Dict[str, str] = {}
+            cover_name = _cover_name(source_path, set(names))
+            title = str(metadata["title"] or "") or source_path.stem
+            authors = str(metadata["authors"] or "")
+            language = metadata["language"]
+            descriptions = metadata["descriptions"]
+            tags = metadata["tags"]
+            synopsis = f"<p>{html.escape(str(descriptions[0]))}</p>" if descriptions else ""
+
+            on_phase("预检查正文内容")
+            sample_indices = {0, len(spine_names) // 2, len(spine_names) - 1}
+            sample_text: Dict[str, str] = {}
+            headings: Dict[str, str] = {}
+            readable: List[str] = []
+            from bs4 import BeautifulSoup
+
+            for index, item_name in enumerate(spine_names):
+                _check_cancel(signal)
+                raw = _read_zip_entry(archive, item_name, MAX_CHAPTER_BYTES)
+                soup = BeautifulSoup(raw, "html.parser")
+                root = soup.body or soup
+                dangerous = root.find(list(_REJECTED_MARKUP_TAGS))
+                if dangerous is not None:
+                    tag_name = str(dangerous.name or "").lower()
+                    if tag_name in {"audio", "video", "source", "track"}:
+                        raise EpubImportError(
+                            f"EPUB chapter contains a {tag_name} element.",
+                            "EPUB 包含音频或视频内容，仅支持文字和静态插图。",
+                        )
+                    raise EpubImportError(
+                        f"EPUB chapter contains a {tag_name} element.",
+                        "EPUB 包含脚本或交互内容，无法安全导入。",
+                    )
+                heading_tag = root.find(["h1", "h2", "h3"])
+                if heading_tag:
+                    headings[item_name] = heading_tag.get_text(" ", strip=True)
+                text = root.get_text(" ", strip=True)
+                has_image = root.find(["img", "svg"]) is not None
+                if text or has_image:
+                    readable.append(item_name)
+                    if index in sample_indices:
+                        sample_text[item_name] = text[:240]
+
+        on_phase("生成导入预览")
         chapters: List[Dict[str, Any]] = []
         volume_numbers: Dict[str, int] = {}
         volume_titles: Dict[int, str] = {}
-        for serial, (item_name, item) in enumerate(spine_items, start=1):
+        for item_name in readable:
             _check_cancel(signal)
             toc = toc_by_name.get(item_name)
-            raw = item.get_content()
-            body, used_images = _clean_html(
-                raw,
-                item_name,
-                image_items,
-                image_paths,
-                prepared_images,
-            )
-            if not body:
-                continue
-            heading = ""
-            from bs4 import BeautifulSoup
-
-            soup = BeautifulSoup(raw, "html.parser")
-            heading_tag = soup.find(["h1", "h2", "h3"])
-            if heading_tag:
-                heading = heading_tag.get_text(" ", strip=True)
-            chapter_title = (
-                (toc.title if toc else "")
-                or heading
-                or str(getattr(item, "title", "") or "").strip()
-            )
+            chapter_title = (toc.title if toc else "") or headings.get(item_name, "")
             chapter_title = chapter_title or f"第 {len(chapters) + 1} 章"
             volume_title = (toc.volume if toc else None) or "正文"
             if volume_title not in volume_numbers:
@@ -568,23 +849,15 @@ class EpubParser:
                 volume_titles[volume_number] = volume_title
             volume_number = volume_numbers[volume_title]
             output_serial = len(chapters) + 1
-            body_path = f"chapters/{output_serial:06}.html"
-            (prepared_chapters / f"{output_serial:06}.html").write_text(
-                body,
-                encoding="utf-8",
-            )
             chapters.append(
                 {
                     "stable_key": item_name,
+                    "archive_name": item_name,
                     "title": chapter_title,
                     "serial": output_serial,
                     "volume": volume_number,
                     "volume_title": volume_title,
-                    "body_path": body_path,
-                    "images": used_images,
-                    "body_preview": BeautifulSoup(body, "html.parser").get_text(" ", strip=True)[
-                        :240
-                    ],
+                    "body_preview": sample_text.get(item_name, ""),
                 }
             )
 
@@ -594,15 +867,32 @@ class EpubParser:
                 "这个 EPUB 没有可读章节正文。",
             )
 
-        on_phase("生成导入预览")
-        if not title:
-            title = source_path.stem
-        samples = [
+        sample_chapters = [
             chapters[0],
             chapters[len(chapters) // 2],
             chapters[-1],
         ]
+        unique_samples: List[Dict[str, Any]] = []
+        seen_samples: set[str] = set()
+        for sample in sample_chapters:
+            if sample["stable_key"] in seen_samples:
+                continue
+            seen_samples.add(sample["stable_key"])
+            if not sample["body_preview"]:
+                with zipfile.ZipFile(source_path) as archive:
+                    raw = _read_zip_entry(
+                        archive,
+                        str(sample["archive_name"]),
+                        MAX_CHAPTER_BYTES,
+                    )
+                from bs4 import BeautifulSoup
+
+                sample["body_preview"] = BeautifulSoup(raw, "html.parser").get_text(
+                    " ", strip=True
+                )[:240]
+            unique_samples.append(sample)
         preview = {
+            "source_format": "epub",
             "title": title,
             "authors": authors,
             "language": language,
@@ -610,27 +900,134 @@ class EpubParser:
             "tags": tags,
             "chapters": len(chapters),
             "volumes": len(volume_titles),
-            "cover_available": cover_path is not None,
+            "cover_available": cover_name in image_items,
+            "illustrations": sum(
+                1 for media_type in image_items.values() if media_type in _SUPPORTED_IMAGE_TYPES
+            ),
+            "warnings": warnings[:MAX_PREVIEW_WARNINGS],
             "samples": [
                 {
                     "title": sample["title"],
                     "body_preview": sample["body_preview"],
                 }
-                for sample in samples
+                for sample in unique_samples
             ],
         }
         manifest = {
-            **preview,
-            "cover_path": cover_path,
+            "schema_version": 1,
+            "source_format": "epub",
+            "title": title,
+            "authors": authors,
+            "language": language,
+            "synopsis": synopsis,
+            "tags": tags,
+            "cover_resource": cover_name,
             "volume_titles": {str(key): value for key, value in volume_titles.items()},
             "chapters_data": chapters,
-            "images": image_paths,
+            "image_items": image_items,
         }
         (prepared_dir / "manifest.json").write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-        return manifest
+        return preview, manifest
+
+    def prepare_commit(
+        self,
+        source_path: Path,
+        prepared_dir: Path,
+        manifest: Dict[str, Any],
+        signal: Event,
+    ) -> Dict[str, Any]:
+        prepared_images = prepared_dir / "images"
+        prepared_chapters = prepared_dir / "chapters"
+        prepared_images.mkdir(parents=True, exist_ok=True)
+        prepared_chapters.mkdir(parents=True, exist_ok=True)
+        image_items = {
+            str(name): str(media_type)
+            for name, media_type in (manifest.get("image_items") or {}).items()
+        }
+        image_paths: Dict[str, str] = {}
+        chapters: List[Dict[str, Any]] = []
+        volume_numbers: Dict[str, int] = {}
+        volume_titles: Dict[int, str] = {}
+        cover_path: Optional[str] = None
+
+        with zipfile.ZipFile(source_path) as archive:
+            cover_name = str(manifest.get("cover_resource") or "")
+            if cover_name in image_items:
+                if image_items[cover_name] == "image/svg+xml":
+                    svg_root = _parse_xml(_read_zip_entry(archive, cover_name, MAX_XML_BYTES))
+                    references: List[str] = []
+                    for element in svg_root.iter():
+                        if _local_name(element.tag).lower() != "image":
+                            continue
+                        href = str(
+                            element.attrib.get("href")
+                            or element.attrib.get("{http://www.w3.org/1999/xlink}href")
+                            or ""
+                        ).strip()
+                        matched = _match_name(
+                            href,
+                            image_items.keys(),
+                            posixpath.dirname(cover_name),
+                        )
+                        if matched and image_items.get(matched) in _SUPPORTED_IMAGE_TYPES:
+                            references.append(matched)
+                    references = list(dict.fromkeys(references))
+                    cover_name = references[0] if len(references) == 1 else ""
+                if cover_name:
+                    converted_cover = _image_jpeg(
+                        _read_zip_entry(archive, cover_name, MAX_IMAGE_BYTES)
+                    )
+                    if converted_cover is not None:
+                        cover_path = "cover.jpg"
+                        (prepared_dir / cover_path).write_bytes(converted_cover)
+
+            for source_item in manifest.get("chapters_data") or []:
+                _check_cancel(signal)
+                item = dict(source_item)
+                archive_name = str(item["archive_name"])
+                raw = _read_zip_entry(archive, archive_name, MAX_CHAPTER_BYTES)
+                body, used_images = _clean_html(
+                    raw,
+                    archive_name,
+                    archive,
+                    image_items,
+                    image_paths,
+                    prepared_images,
+                )
+                if not body:
+                    continue
+                volume_title = str(item.get("volume_title") or "正文")
+                if volume_title not in volume_numbers:
+                    volume_number = len(volume_numbers) + 1
+                    volume_numbers[volume_title] = volume_number
+                    volume_titles[volume_number] = volume_title
+                serial = len(chapters) + 1
+                body_path = f"chapters/{serial:06d}.html"
+                (prepared_dir / body_path).write_text(body, encoding="utf-8")
+                item.update(
+                    serial=serial,
+                    volume=volume_numbers[volume_title],
+                    body_path=body_path,
+                    images=used_images,
+                )
+                chapters.append(item)
+
+        if not chapters:
+            raise EpubImportError(
+                "EPUB has no safe chapter bodies after sanitizing.",
+                "这个 EPUB 清理后没有可导入的文字或插图。",
+            )
+        prepared = dict(manifest)
+        prepared.update(
+            cover_path=cover_path,
+            images=image_paths,
+            chapters_data=chapters,
+            volume_titles={str(key): value for key, value in volume_titles.items()},
+        )
+        return prepared
 
 
 class EpubImportService:
@@ -680,7 +1077,7 @@ class EpubImportService:
                         break
                     size += len(chunk)
                     if size > MAX_UPLOAD_BYTES:
-                        raise ServerErrors.invalid_input.with_extra("EPUB 文件不能超过 100 MB")
+                        raise ServerErrors.invalid_input.with_extra("EPUB 文件不能超过 50 MB")
                     digest.update(chunk)
                     output.write(chunk)
             if size < 4:
@@ -703,6 +1100,7 @@ class EpubImportService:
                     original_name=filename,
                     file_size=size,
                     staging_path=self._staging_path(session_id),
+                    source_format="epub",
                     status="analyzing",
                     expires_at=now + SESSION_TTL_MS,
                 )
@@ -725,6 +1123,72 @@ class EpubImportService:
         except Exception:
             if self._session_dir(session_id).exists():
                 self._delete_staging(session_id)
+            raise
+        finally:
+            await upload.close()
+
+    async def start_txt_upload(self, user: Any, upload: UploadFile) -> Dict[str, Any]:
+        from .imports.txt import MAX_TXT_UPLOAD_BYTES
+
+        filename = Path(str(upload.filename or "")).name
+        if not filename.lower().endswith(".txt"):
+            raise ServerErrors.invalid_input.with_extra("仅支持 TXT 文件")
+        session_id = generate_uuid()
+        directory = self._session_dir(session_id)
+        digest = sha256()
+        size = 0
+        try:
+            directory.mkdir(parents=True, exist_ok=False)
+            path = directory / "upload.txt"
+            with path.open("wb") as output:
+                while True:
+                    chunk = await upload.read(_CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    if size > MAX_TXT_UPLOAD_BYTES:
+                        raise ServerErrors.invalid_input.with_extra("TXT 文件不能超过 20 MB")
+                    digest.update(chunk)
+                    output.write(chunk)
+            if not size:
+                raise ServerErrors.invalid_input.with_extra("TXT 文件不能为空")
+            existing = self.find_imported_novel(digest.hexdigest())
+            if existing:
+                self._delete_staging(session_id)
+                return {
+                    "session_id": None,
+                    "job_id": None,
+                    "existing_novel_id": existing.id,
+                }
+            now = current_timestamp()
+            staging_path = str(Path("tmp") / "imports" / session_id / "upload.txt")
+            with ctx.db.session() as sess:
+                session = ImportSession(
+                    id=session_id,
+                    user_id=user.id,
+                    file_sha256=digest.hexdigest(),
+                    source_format="txt",
+                    original_name=filename,
+                    file_size=size,
+                    staging_path=staging_path,
+                    status="analyzing",
+                    expires_at=now + SESSION_TTL_MS,
+                )
+                sess.add(session)
+                sess.commit()
+            job = ctx.jobs.import_txt_analysis(user, session_id, filename)
+            if not self.attach_job(
+                session_id,
+                analyze_job_id=job.id,
+                expected_status="analyzing",
+            ):
+                ctx.scheduler.stop_job(job.id)
+                ctx.jobs.cancel(job.id)
+                raise ServerErrors.invalid_input.with_extra("该 TXT 导入已取消")
+            return {"session_id": session_id, "job_id": job.id, "existing_novel_id": None}
+        except Exception:
+            if self._session_dir(session_id).exists():
+                self.delete_session(session_id)
             raise
         finally:
             await upload.close()
@@ -791,6 +1255,19 @@ class EpubImportService:
         return True
 
     def fail_session(self, session_id: str, message: str) -> None:
+        session = self._get_by_id(session_id)
+        backup = self._session_dir(session_id) / "prepared-backup"
+        if (session.source_format or "epub") == "txt" and backup.is_dir():
+            prepared = self._session_dir(session_id) / "prepared"
+            self._delete_directory(prepared)
+            backup.replace(prepared)
+            self._transition_session(
+                session_id,
+                {"analyzing"},
+                status="ready",
+                error=message,
+            )
+            return
         self._transition_session(
             session_id,
             _ACTIVE_SESSION_STATUSES,
@@ -836,21 +1313,33 @@ class EpubImportService:
             raise AbortedException()
         path = ctx.files.resolve(session.staging_path)
         if not path.is_file():
-            raise EpubImportError(
-                "The uploaded EPUB staging file is missing.",
-                "找不到待分析的 EPUB 文件。",
-            )
+            raise EpubImportError("The uploaded staging file is missing.", "找不到待分析的文件。")
         prepared_dir = self._session_dir(session_id) / "prepared"
-        manifest = EpubParser().analyze(path, prepared_dir, signal, on_phase)
+        if (session.source_format or "epub") == "txt":
+            from .imports.txt import TxtAdapter
+
+            options_path = self._session_dir(session_id) / "options.json"
+            options = (
+                json.loads(options_path.read_text(encoding="utf-8"))
+                if options_path.is_file()
+                else {}
+            )
+            preview, _manifest = TxtAdapter().analyze(path, prepared_dir, signal, on_phase, options)
+        else:
+            preview, _manifest = EpubParser().analyze(path, prepared_dir, signal, on_phase)
         _check_cancel(signal)
+        if len(json.dumps(preview, ensure_ascii=False).encode("utf-8")) > MAX_PUBLIC_PREVIEW_BYTES:
+            raise EpubImportError("The EPUB preview exceeds the supported size limit.")
         if not self._transition_session(
             session_id,
             {"analyzing"},
             status="ready",
-            preview=manifest,
+            preview=preview,
             error=None,
         ):
             raise AbortedException()
+        backup = self._session_dir(session_id) / "prepared-backup"
+        self._delete_directory(backup)
 
     def _get_by_id(self, session_id: str) -> ImportSession:
         with ctx.db.session() as sess:
@@ -876,6 +1365,7 @@ class EpubImportService:
             phase = None
         return {
             "id": session.id,
+            "source_format": session.source_format or "epub",
             "status": session.status,
             "original_name": session.original_name,
             "file_size": session.file_size,
@@ -892,8 +1382,11 @@ class EpubImportService:
 
     def claim_commit(self, session_id: str, user: Any, title: str, authors: str) -> Job:
         session = self.get_session(session_id, user)
+        source_format = session.source_format or "epub"
         if session.status != "ready":
-            raise ServerErrors.invalid_input.with_extra("该 EPUB 当前不能导入")
+            raise ServerErrors.invalid_input.with_extra("该文件当前不能导入")
+        if source_format == "txt" and not bool(session.preview.get("can_commit", True)):
+            raise ServerErrors.invalid_input.with_extra("请先确认 TXT 编码并更新预览")
         title = title.strip() or str(session.preview.get("title") or "").strip()
         authors = authors.strip() or str(session.preview.get("authors") or "").strip()
         if not title:
@@ -912,10 +1405,14 @@ class EpubImportService:
                 )
             )
             if result.rowcount != 1:
-                raise ServerErrors.invalid_input.with_extra("该 EPUB 当前不能导入")
+                raise ServerErrors.invalid_input.with_extra("该文件当前不能导入")
             sess.commit()
         try:
-            job = ctx.jobs.import_epub_commit(user, session_id, title, authors)
+            job = (
+                ctx.jobs.import_txt_commit(user, session_id, title, authors)
+                if source_format == "txt"
+                else ctx.jobs.import_epub_commit(user, session_id, title, authors)
+            )
             if not self.attach_job(
                 session_id,
                 commit_job_id=job.id,
@@ -933,6 +1430,59 @@ class EpubImportService:
                 error=None,
             )
             raise
+
+    def reanalyze_txt(
+        self,
+        session_id: str,
+        user: Any,
+        options: Dict[str, Any],
+    ) -> Job:
+        session = self.get_session(session_id, user)
+        if (session.source_format or "epub") != "txt" or session.status != "ready":
+            raise ServerErrors.invalid_input.with_extra("该 TXT 当前不能重新分析")
+        options_path = self._session_dir(session_id) / "options.json"
+        options_path.write_text(json.dumps(options, ensure_ascii=False), encoding="utf-8")
+        prepared = self._session_dir(session_id) / "prepared"
+        backup = self._session_dir(session_id) / "prepared-backup"
+        self._delete_directory(backup)
+        if prepared.is_dir():
+            prepared.replace(backup)
+        with ctx.db.session() as sess:
+            result = sess.exec(
+                sq.update(ImportSession)
+                .where(
+                    sq.col(ImportSession.id) == session_id,
+                    sq.col(ImportSession.status) == "ready",
+                )
+                .values(
+                    status="analyzing",
+                    analyze_job_id=None,
+                    error=None,
+                    updated_at=current_timestamp(),
+                )
+            )
+            if result.rowcount != 1:
+                if backup.is_dir():
+                    backup.replace(prepared)
+                raise ServerErrors.invalid_input.with_extra("该 TXT 当前不能重新分析")
+            sess.commit()
+        job = ctx.jobs.import_txt_analysis(user, session_id, session.original_name, options)
+        if not self.attach_job(
+            session_id,
+            analyze_job_id=job.id,
+            expected_status="analyzing",
+        ):
+            self._delete_directory(prepared)
+            if backup.is_dir():
+                backup.replace(prepared)
+            self._transition_session(
+                session_id,
+                {"analyzing"},
+                status="ready",
+                error="TXT 重新分析任务未创建",
+            )
+            raise ServerErrors.invalid_input.with_extra("TXT 重新分析任务未创建")
+        return job
 
     def cancel(self, session_id: str, user: Any) -> None:
         self.get_session(session_id, user)
@@ -1029,6 +1579,59 @@ class EpubImportService:
             self._delete_staging(session_id)
             return existing.id
 
+        source_format = session.source_format or "epub"
+        if source_format == "txt":
+            from .imports.txt import TxtAdapter
+
+            chapter_items: List[Dict[str, Any]] = []
+            volume_numbers: Dict[str, int] = {}
+            volume_titles: Dict[int, str] = {}
+            for imported in TxtAdapter().iter_chapters(prepared_dir, manifest, signal):
+                volume_title = str(imported.get("volume_title") or "正文")
+                if volume_title not in volume_numbers:
+                    volume_number = len(volume_numbers) + 1
+                    volume_numbers[volume_title] = volume_number
+                    volume_titles[volume_number] = volume_title
+                serial = len(chapter_items) + 1
+                body_path = f"chapters/{serial:06d}.html"
+                target = prepared_dir / body_path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(str(imported["body"]), encoding="utf-8")
+                chapter_items.append(
+                    {
+                        "serial": serial,
+                        "volume": volume_numbers[volume_title],
+                        "title": str(imported["title"]),
+                        "body_path": body_path,
+                        "images": [],
+                    }
+                )
+            metadata = manifest.get("metadata") or {}
+            manifest = {
+                "title": metadata.get("title"),
+                "authors": metadata.get("authors"),
+                "synopsis": "",
+                "tags": [],
+                "language": None,
+                "cover_path": None,
+                "images": {},
+                "volume_titles": {str(key): value for key, value in volume_titles.items()},
+                "chapters_data": chapter_items,
+            }
+        else:
+            path = ctx.files.resolve(session.staging_path)
+            if not path.is_file():
+                raise EpubImportError(
+                    "The uploaded EPUB staging file is missing.",
+                    "找不到待导入的 EPUB 文件。",
+                )
+            manifest = EpubParser().prepare_commit(
+                path,
+                prepared_dir,
+                manifest,
+                signal,
+            )
+
         novel_id = session.novel_id or self._reserve_novel_id(session_id)
         novel_url = f"{IMPORT_URL_PREFIX}{session.file_sha256}"
         final_dir = ctx.files.resolve(f"novels/{novel_id}")
@@ -1076,7 +1679,7 @@ class EpubImportService:
                     url=f"{novel_url}#chapter-{serial}",
                     title=str(item["title"]),
                     is_done=True,
-                    extra={"imported": True, "source_format": "epub"},
+                    extra={"imported": True, "source_format": source_format},
                 )
                 body = (prepared_dir / str(item["body_path"])).read_text(encoding="utf-8")
                 for image_id in item.get("images") or []:
@@ -1122,7 +1725,7 @@ class EpubImportService:
                 chapter_count=len(chapters),
                 extra={
                     "imported": True,
-                    "source_format": "epub",
+                    "source_format": source_format,
                     "original_name": session.original_name,
                     "file_sha256": session.file_sha256,
                     "imported_at": current_timestamp(),

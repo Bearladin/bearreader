@@ -25,6 +25,7 @@ if TYPE_CHECKING:
         EpubImportSample,
         EpubImportSessionResponse,
         EpubImportStartResponse,
+        TxtReanalyzeRequest,
     )
     from .job import (
         FetchChaptersRequest,
@@ -113,6 +114,7 @@ __all__ = [
     "EpubImportSample",
     "EpubImportSessionResponse",
     "EpubImportStartResponse",
+    "TxtReanalyzeRequest",
     # pagination
     "Paginated",
     # user
@@ -174,6 +176,7 @@ _LAZY: dict[str, str] = {
     "EpubImportSample": ".imports",
     "EpubImportSessionResponse": ".imports",
     "EpubImportStartResponse": ".imports",
+    "TxtReanalyzeRequest": ".imports",
     "Paginated": ".pagination",
     "AppInfo": ".sources",
     "CrawlerIndex": ".sources",

@@ -57,6 +57,7 @@ export interface EpubImportSample {
 }
 
 export interface EpubImportPreview {
+  source_format?: 'epub' | 'txt';
   title: string;
   authors: string;
   language?: string;
@@ -65,6 +66,17 @@ export interface EpubImportPreview {
   chapters: number;
   volumes: number;
   cover_available: boolean;
+  illustrations?: number;
+  warnings?: string[];
+  can_commit?: boolean;
+  encoding?: {
+    selected: string;
+    confidence: number;
+    requires_confirmation: boolean;
+    candidates: string[];
+  };
+  paragraph_mode?: 'auto' | 'block' | 'print' | 'single' | 'unformatted';
+  resolved_paragraph_mode?: 'block' | 'print' | 'single' | 'unformatted';
   samples: EpubImportSample[];
 }
 
@@ -76,6 +88,7 @@ export interface EpubImportStartResponse {
 
 export interface EpubImportSession {
   id: string;
+  source_format?: 'epub' | 'txt';
   status: string;
   original_name: string;
   file_size: number;

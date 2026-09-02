@@ -41,6 +41,8 @@ class JobType(IntEnum):
     FETCH_LATEST = 61
     IMPORT_EPUB_ANALYZE = 70
     IMPORT_EPUB_COMMIT = 71
+    IMPORT_TXT_ANALYZE = 72
+    IMPORT_TXT_COMMIT = 73
 
 
 class JobStatus(IntEnum):

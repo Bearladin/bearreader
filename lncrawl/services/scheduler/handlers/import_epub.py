@@ -2,13 +2,14 @@ from ....context import ctx
 from ....enums import JobType
 from ....exceptions import AbortedException
 from ....services.epub_import import EpubImportError
+from ....services.imports.txt import TxtImportError
 from ._base import BaseHandler, HandlerException
 
 
 class EpubAnalyzeHandler(BaseHandler):
     @staticmethod
     def can_activate(job) -> bool:
-        return job.type == JobType.IMPORT_EPUB_ANALYZE
+        return job.type in (JobType.IMPORT_EPUB_ANALYZE, JobType.IMPORT_TXT_ANALYZE)
 
     def run(self) -> None:
         session_id = self.job.extra.get("import_session_id")
@@ -31,18 +32,18 @@ class EpubAnalyzeHandler(BaseHandler):
         except AbortedException:
             ctx.epub_import.cancel_by_job(session_id)
             raise
-        except EpubImportError as error:
+        except (EpubImportError, TxtImportError) as error:
             ctx.epub_import.fail_session(session_id, error.user_message)
             raise HandlerException(error.user_message) from error
         except Exception:
-            ctx.epub_import.fail_session(session_id, "这个 EPUB 文件无法导入。")
+            ctx.epub_import.fail_session(session_id, "这个文件无法导入。")
             raise
 
 
 class EpubCommitHandler(BaseHandler):
     @staticmethod
     def can_activate(job) -> bool:
-        return job.type == JobType.IMPORT_EPUB_COMMIT
+        return job.type in (JobType.IMPORT_EPUB_COMMIT, JobType.IMPORT_TXT_COMMIT)
 
     def run(self) -> None:
         session_id = self.job.extra.get("import_session_id")
@@ -63,9 +64,9 @@ class EpubCommitHandler(BaseHandler):
         except AbortedException:
             ctx.epub_import.cancel_by_job(session_id)
             raise
-        except EpubImportError as error:
+        except (EpubImportError, TxtImportError) as error:
             ctx.epub_import.fail_session(session_id, error.user_message)
             raise HandlerException(error.user_message) from error
         except Exception:
-            ctx.epub_import.fail_session(session_id, "导入 EPUB 失败。")
+            ctx.epub_import.fail_session(session_id, "导入文件失败。")
             raise

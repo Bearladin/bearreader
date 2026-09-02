@@ -94,7 +94,12 @@ def cancel_job(
 ) -> bool:
     ctx.jobs.verify_access(user, job_id)
     job = ctx.jobs.get(job_id)
-    if job.type in (JobType.IMPORT_EPUB_ANALYZE, JobType.IMPORT_EPUB_COMMIT):
+    if job.type in (
+        JobType.IMPORT_EPUB_ANALYZE,
+        JobType.IMPORT_EPUB_COMMIT,
+        JobType.IMPORT_TXT_ANALYZE,
+        JobType.IMPORT_TXT_COMMIT,
+    ):
         ctx.epub_import.cancel_for_job(job_id, user)
         return True
     # Cancelling any job of a multi-step request cancels the whole request:
