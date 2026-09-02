@@ -38,7 +38,6 @@ export function setupAxios() {
 
   axios.defaults.baseURL = API_BASE_URL;
   axios.defaults.headers.common.Accept = 'application/json';
-  axios.defaults.headers.post['Content-Type'] = 'application/json';
 
   // authorization header
   axios.defaults.headers.common.Authorization =

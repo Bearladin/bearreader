@@ -6,9 +6,6 @@ import {
   Flex,
   Form,
   Input,
-  Space,
-  Switch,
-  Typography,
   message,
 } from 'antd';
 import axios from 'axios';
@@ -17,7 +14,6 @@ import { useState } from 'react';
 interface FormValues {
   name: string;
   description?: string;
-  is_public?: boolean;
 }
 
 interface Props {
@@ -46,7 +42,6 @@ export const CreateLibraryView: React.FC<Props> = ({
       const { data } = await axios.post<Library>('/api/library', {
         name: values.name.trim(),
         description: values.description?.trim(),
-        is_public: Boolean(values.is_public),
       });
       await axios.put(`/api/library/${data.id}/novel/${novelId}`);
       messageApi.success('小说已成功添加到书架');
@@ -67,7 +62,6 @@ export const CreateLibraryView: React.FC<Props> = ({
         size="large"
         layout="vertical"
         onFinish={handleSubmit}
-        initialValues={{ is_public: false }}
         labelCol={{ style: { padding: 0 } }}
       >
         <Form.Item
@@ -81,14 +75,6 @@ export const CreateLibraryView: React.FC<Props> = ({
         <Form.Item label="描述" name="description">
           <Input.TextArea placeholder="选填描述" rows={3} />
         </Form.Item>
-
-        <Form.Item label="可见范围" name="is_public" valuePropName="checked">
-          <Space>
-            <Switch aria-label="公开书架" />
-            <Typography.Text>所有人可见</Typography.Text>
-          </Space>
-        </Form.Item>
-
         <Form.Item>
           <Flex gap={8} justify="flex-end">
             <Button icon={<ArrowLeftOutlined />} onClick={onBack}>

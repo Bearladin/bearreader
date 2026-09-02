@@ -15,6 +15,19 @@ export function stringifyError(
     if (data?.detail && typeof data?.detail === 'string') {
       return data.detail;
     }
+    if (Array.isArray(data?.detail)) {
+      const messages = data.detail
+        .slice(0, 3)
+        .map((item: unknown) => {
+          if (!item || typeof item !== 'object') return undefined;
+          const message = Reflect.get(item, 'msg');
+          return typeof message === 'string' ? message : undefined;
+        })
+        .filter((item: unknown): item is string => typeof item === 'string');
+      if (messages.length) {
+        return `请求参数无效：${messages.join('；')}`;
+      }
+    }
     if (data?.stack && typeof data?.stack === 'string') {
       return data.stack;
     }
