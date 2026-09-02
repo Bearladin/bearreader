@@ -14,7 +14,11 @@ import sqlmodel
 
 from lncrawl.context import ctx
 from lncrawl.dao import Chapter, ChapterImage, ImportSession, JobStatus, Novel
-from lncrawl.services.epub_import import EpubImportError, _parse_xml
+from lncrawl.services.epub_import import (
+    EpubImportError,
+    _leading_title_cleanup,
+    _parse_xml,
+)
 from lncrawl.services.scheduler.handlers.import_epub import (
     EpubAnalyzeHandler,
     EpubCommitHandler,
@@ -52,7 +56,8 @@ def _fixture_bytes(identifier: str = "fixture-id") -> bytes:
             )
         else:
             chapter.content = (
-                f"<html><body><h1>Chapter {number}</h1>"
+                f'<html><body><h4 aria-hidden="true">#{number}</h4>'
+                f"<h1>Chapter {number}</h1>"
                 f"<p>Content for chapter {number}.</p>"
                 '<img src="../images/cover.png" onclick="bad()" /></body></html>'
             )
@@ -71,6 +76,27 @@ def _fixture_bytes(identifier: str = "fixture-id") -> bytes:
         path = Path(temporary) / "fixture.epub"
         epub.write_epub(str(path), book, {})
         return path.read_bytes()
+
+
+def _verify_title_cleanup_guardrails() -> None:
+    from bs4 import BeautifulSoup
+
+    exact = BeautifulSoup(
+        '<body><div><h4 aria-hidden="true">#2</h4><h1>第二章 入考</h1><p>正文。</p></div></body>',
+        "html.parser",
+    )
+    heading, marker = _leading_title_cleanup(exact.body, "第二章 入考")
+    assert heading is not None and marker is not None
+
+    rejected = [
+        "<body><h1>第二章：入考</h1><p>正文。</p></body>",
+        "<body><p>题记。</p><h1>第二章 入考</h1></body>",
+        "<body><h4>#2</h4><h1>第二章 入考</h1></body>",
+        '<body><img src="cover.jpg"/><h1>第二章 入考</h1></body>',
+    ]
+    for markup in rejected:
+        soup = BeautifulSoup(markup, "html.parser")
+        assert _leading_title_cleanup(soup.body, "第二章 入考") == (None, None)
 
 
 async def _verify() -> None:
@@ -115,6 +141,9 @@ async def _verify() -> None:
     assert all(ctx.files.exists(chapter.content_file) for chapter in chapters)
     assert all(ctx.files.exists(image.image_file) for image in images)
     assert "onclick" not in ctx.files.load_text(chapters[0].content_file)
+    assert "<h1>Chapter 1</h1>" not in ctx.files.load_text(chapters[0].content_file)
+    assert "#1" not in ctx.files.load_text(chapters[0].content_file)
+    assert "Content for chapter 1." in ctx.files.load_text(chapters[0].content_file)
     assert "<img" in ctx.files.load_text(chapters[2].content_file)
     assert ctx.jobs.get(commit_job.id).status == JobStatus.SUCCESS
     ctx.jobs.cancel(commit_job.id)
@@ -161,6 +190,7 @@ async def _verify() -> None:
 
 
 def main() -> None:
+    _verify_title_cleanup_guardrails()
     previous = os.environ.get("XIAOXIONG_NOVEL_DATA_PATH")
     try:
         with TemporaryDirectory(prefix="bearreader-epub-verifier-") as temporary:

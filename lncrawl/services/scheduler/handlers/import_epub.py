@@ -2,6 +2,7 @@ from ....context import ctx
 from ....enums import JobType
 from ....exceptions import AbortedException
 from ....services.epub_import import EpubImportError
+from ....services.imports.progress import should_persist_progress
 from ....services.imports.txt import TxtImportError
 from ._base import BaseHandler, HandlerException
 
@@ -20,14 +21,21 @@ class EpubAnalyzeHandler(BaseHandler):
         if not self.job.is_running:
             self._set_running()
 
-        def on_phase(phase: str) -> None:
+        def on_progress(phase: str, percent: int) -> None:
             if self.signal.is_set():
                 raise AbortedException()
-            self._set_extra(phase=phase)
-            self._increment()
+            target = max(self.job.done, min(99, int(percent)))
+            previous_phase = str(self.job.extra.get("phase") or "")
+            if should_persist_progress(
+                self.job.done,
+                previous_phase,
+                target,
+                phase,
+            ):
+                self._set_progress(target, phase=phase)
 
         try:
-            ctx.epub_import.analyze_session(session_id, self.signal, on_phase)
+            ctx.epub_import.analyze_session(session_id, self.signal, on_progress)
             self._set_extra(phase="分析完成")
         except AbortedException:
             ctx.epub_import.cancel_by_job(session_id)
@@ -53,12 +61,27 @@ class EpubCommitHandler(BaseHandler):
             raise AbortedException()
         if not self.job.is_running:
             self._set_running()
+
+        def on_progress(phase: str, percent: int) -> None:
+            if self.signal.is_set():
+                raise AbortedException()
+            target = max(self.job.done, min(99, int(percent)))
+            previous_phase = str(self.job.extra.get("phase") or "")
+            if should_persist_progress(
+                self.job.done,
+                previous_phase,
+                target,
+                phase,
+            ):
+                self._set_progress(target, phase=phase)
+
         try:
             novel_id = ctx.epub_import.commit_session(
                 session_id,
                 str(self.job.extra.get("novel_title") or ""),
                 str(self.job.extra.get("authors") or ""),
                 self.signal,
+                on_progress,
             )
             self._set_extra(novel_id=novel_id, phase="导入完成")
         except AbortedException:
