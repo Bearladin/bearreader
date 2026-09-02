@@ -193,7 +193,7 @@ def main() -> None:
     _verify_title_cleanup_guardrails()
     previous = os.environ.get("XIAOXIONG_NOVEL_DATA_PATH")
     try:
-        with TemporaryDirectory(prefix="bearreader-epub-verifier-") as temporary:
+        with TemporaryDirectory(prefix="bearreader-epub-verifier-", ignore_cleanup_errors=True) as temporary:
             os.environ["XIAOXIONG_NOVEL_DATA_PATH"] = temporary
             ctx.setup()
             try:

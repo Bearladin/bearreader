@@ -111,6 +111,12 @@ const technicalTokens = [
   'BearReader.exe',
   // 构建钩子注入窗口标题的模板片段（技术构造，非界面文案）
   '<title>BearReader v',
+  // 文件选择器的 accept 属性值（MIME 技术串，非界面文案）
+  '.epub,.txt,application/epub+zip,text/plain',
+  // Vite preload 恢复用于匹配 Chromium 原始错误消息的特征串（非界面文案）
+  'Failed to fetch dynamically imported module',
+  'Importing a module script failed',
+  'Unable to preload CSS',
   'backendtool.exe',
   'xbanxia',
   'display-mode: standalone',
@@ -1143,6 +1149,10 @@ function runRegressionChecks() {
   return regressions.length;
 }
 
+// 测试文件不是用户界面文案的载体，描述与夹具惯例使用英文；
+// 本轮（2026-09-02）随 EPUB/TXT 导入的 Vitest 套件加入此豁免。
+const testFilePattern = /\.test\.[jt]sx?$/;
+
 async function collectFiles(target) {
   const absolute = path.join(repoRoot, target);
   const targetStat = await stat(absolute);
@@ -1159,7 +1169,8 @@ async function collectFiles(target) {
         if (entry.isDirectory()) {
           return collectFiles(relative);
         }
-        return textExtensions.has(path.extname(entry.name))
+        return textExtensions.has(path.extname(entry.name)) &&
+          !testFilePattern.test(entry.name)
           ? [path.join(repoRoot, relative)]
           : [];
       })

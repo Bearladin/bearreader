@@ -88,7 +88,14 @@ def verify() -> None:
             original_gettempdir = startup_diagnostics.gettempdir
             try:
                 startup_diagnostics.gettempdir = lambda: temporary
-                os.environ[startup_diagnostics.DATA_ENV] = "~definitely-no-such-user/startup"
+                # 主候选必须真正不可写才会走回退：把 DATA_ENV 指到一个
+                # 已存在文件的路径下，mkdir(parents=True) 会抛 FileExistsError
+                # （OSError 子类），从而强制回退到 TEMP。
+                blocked_file = Path(temporary) / "blocked-as-directory.txt"
+                blocked_file.write_text("x", encoding="utf-8")
+                os.environ[startup_diagnostics.DATA_ENV] = str(
+                    blocked_file / "startup"
+                )
                 fallback = startup_diagnostics.record_startup_failure(
                     "fallback",
                     "无效主目录回退验证",
