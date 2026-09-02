@@ -12,6 +12,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **The app-mode browser no longer bloats the data directory** — The window is an Edge app profile that used to accumulate hundreds of MB of wallet/shopping/visual-search components and update caches inside the app data folder; launch flags now disable those side components while keeping rendering, cookies, sessions and Safe Browsing untouched.
 - **本地 EPUB 导入** — “全部小说”支持拖拽或文件选择导入单个 EPUB，导入前可预览并编辑书名/作者；有封面时提取保存，无封面时使用动态占位封面，完成后直接打开小说详情。
 - **本地 TXT 导入** — 支持编码确认、章节识别和五种段落整理方式，按字节范围逐章写入现有阅读器。
+- **Readable Chinese export filenames** — Exported books keep the readable title (`书名.epub` / `书名.txt.zip`) instead of slugified Pinyin names: NFC normalized, Windows-forbidden characters stripped, a 50-character stem budget with a hash suffix for longer titles; existing exports keep their names until re-exported.
+
+### Changed
+
+- **The job details back-link now says "上级任务请求"** — Renames the old "父任务请求" link so it matches the existing cancellation wording.
 
 ### Fixed
 
