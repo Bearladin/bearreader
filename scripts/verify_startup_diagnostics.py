@@ -93,9 +93,7 @@ def verify() -> None:
                 # （OSError 子类），从而强制回退到 TEMP。
                 blocked_file = Path(temporary) / "blocked-as-directory.txt"
                 blocked_file.write_text("x", encoding="utf-8")
-                os.environ[startup_diagnostics.DATA_ENV] = str(
-                    blocked_file / "startup"
-                )
+                os.environ[startup_diagnostics.DATA_ENV] = str(blocked_file / "startup")
                 fallback = startup_diagnostics.record_startup_failure(
                     "fallback",
                     "无效主目录回退验证",
