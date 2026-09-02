@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Iterable, List, Optional, TypeVar, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, TypeVar, Union
 
 from sqlalchemy.orm import aliased
 import sqlmodel as sq
@@ -42,6 +42,8 @@ _INTERNAL_JOB_TYPES = frozenset(
     {
         JobType.IMPORT_EPUB_ANALYZE,
         JobType.IMPORT_EPUB_COMMIT,
+        JobType.IMPORT_TXT_ANALYZE,
+        JobType.IMPORT_TXT_COMMIT,
     }
 )
 
@@ -259,6 +261,45 @@ class JobService:
                 "phase": "准备导入",
             },
             type=JobType.IMPORT_EPUB_COMMIT,
+        )
+
+    def import_txt_analysis(
+        self,
+        user: User,
+        session_id: str,
+        original_name: str,
+        options: Optional[Dict[str, Any]] = None,
+    ) -> Job:
+        return self._create(
+            user=user,
+            data={
+                "import_session_id": session_id,
+                "original_name": original_name,
+                "source_format": "txt",
+                "import_options": options or {},
+                "phase": "准备分析",
+            },
+            type=JobType.IMPORT_TXT_ANALYZE,
+            total=5,
+        )
+
+    def import_txt_commit(
+        self,
+        user: User,
+        session_id: str,
+        title: str,
+        authors: str,
+    ) -> Job:
+        return self._create(
+            user=user,
+            data={
+                "import_session_id": session_id,
+                "novel_title": title,
+                "authors": authors,
+                "source_format": "txt",
+                "phase": "准备导入",
+            },
+            type=JobType.IMPORT_TXT_COMMIT,
         )
 
     def fetch_many_novels(

@@ -64,6 +64,8 @@ export const JobTypeTag: React.FC<{ value: JobType }> = ({ value }) => {
     case JobType.IMPORT_EPUB_ANALYZE:
       return single(<CloudUploadOutlined />, enumLabels.jobType[value]);
     case JobType.IMPORT_EPUB_COMMIT:
+    case JobType.IMPORT_TXT_ANALYZE:
+    case JobType.IMPORT_TXT_COMMIT:
       return single(<CloudUploadOutlined />, enumLabels.jobType[value]);
     default:
       return <Tag>{String(value)}</Tag>;

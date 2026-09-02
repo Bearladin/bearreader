@@ -68,10 +68,15 @@ class __AppContext__:
         return FileService()
 
     @cached_property
-    def epub_import(self):
+    def book_import(self):
         from .services.epub_import import EpubImportService
 
         return EpubImportService()
+
+    @property
+    def epub_import(self):
+        """Compatibility alias for the shared EPUB/TXT import service."""
+        return self.book_import
 
     @cached_property
     def scraper(self):

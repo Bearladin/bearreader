@@ -6,7 +6,7 @@ from ._base import BaseTable
 
 
 class ImportSession(BaseTable, table=True):
-    """Temporary state for an EPUB import before it becomes a novel."""
+    """Temporary state for a local book import before it becomes a novel."""
 
     __tablename__ = "import_sessions"  # type: ignore
     __table_args__ = (sa.Index("ix_import_sessions_user_status", "user_id", "status"),)
@@ -33,6 +33,7 @@ class ImportSession(BaseTable, table=True):
         nullable=True,
     )
     file_sha256: str = sa.Field(index=True)
+    source_format: Optional[str] = sa.Field(default=None, index=True)
     original_name: str
     file_size: int = sa.Field(sa_type=sa.BigInteger)
     staging_path: str

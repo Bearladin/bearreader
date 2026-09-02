@@ -101,6 +101,13 @@ class Job(BaseTable, table=True):
             title = self.extra.get("novel_title") or "本地书籍"
             return f"导入 EPUB · {title}"
 
+        if self.type == JobType.IMPORT_TXT_ANALYZE:
+            return f"分析 TXT · {self.extra.get('original_name') or '本地书籍'}"
+
+        if self.type == JobType.IMPORT_TXT_COMMIT:
+            title = self.extra.get("novel_title") or "本地书籍"
+            return f"导入 TXT · {title}"
+
         # Require the URL only
         if self.type == JobType.NOVEL or self.type == JobType.FULL_NOVEL:
             return self.extra["url"]

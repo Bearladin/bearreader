@@ -19,6 +19,7 @@ import {
   Input,
   Modal,
   Progress,
+  Select,
   Space,
   Typography,
   Upload,
@@ -44,6 +45,9 @@ export const EpubImportModal: React.FC<{
   const [error, setError] = useState<string>();
   const [title, setTitle] = useState('');
   const [authors, setAuthors] = useState('');
+  const [sourceFormat, setSourceFormat] = useState<'epub' | 'txt'>('epub');
+  const [txtEncoding, setTxtEncoding] = useState('utf-8');
+  const [paragraphMode, setParagraphMode] = useState('auto');
   const uploadAborter = useRef<AbortController | undefined>(undefined);
 
   const active = Boolean(session && ACTIVE_STATUSES.has(session.status));
@@ -59,7 +63,21 @@ export const EpubImportModal: React.FC<{
     }
     setTitle(preview?.title || '');
     setAuthors(preview?.authors || '');
-  }, [open, preview?.authors, preview?.title, session?.id, session?.status]);
+    if (preview?.encoding?.selected) {
+      setTxtEncoding(preview.encoding.selected);
+    }
+    if (preview?.paragraph_mode) {
+      setParagraphMode(preview.paragraph_mode);
+    }
+  }, [
+    open,
+    preview?.authors,
+    preview?.encoding?.selected,
+    preview?.paragraph_mode,
+    preview?.title,
+    session?.id,
+    session?.status,
+  ]);
 
   useEffect(() => {
     if (!open || !session?.id || !ACTIVE_STATUSES.has(session.status)) {
@@ -69,11 +87,17 @@ export const EpubImportModal: React.FC<{
     const poll = async () => {
       try {
         const { data } = await axios.get<EpubImportSession>(
-          `/api/import/epub/${session.id}`
+          `/api/import/${session.id}`
         );
         if (!stopped) {
           setSession(data);
           if (data.status === 'completed' && data.novel_id) {
+            setUploadFile(undefined);
+            setSession(undefined);
+            setUploadProgress(0);
+            setError(undefined);
+            setTitle('');
+            setAuthors('');
             navigate(`/novel/${data.novel_id}`);
             onClose();
           }
@@ -86,11 +110,11 @@ export const EpubImportModal: React.FC<{
                 ? {
                     ...current,
                     status: 'expired',
-                    error: '导入会话已过期，请重新选择 EPUB 文件。',
+                    error: '导入会话已过期，请重新选择文件。',
                   }
                 : current
             );
-            setError('导入会话已过期，请重新选择 EPUB 文件。');
+            setError('导入会话已过期，请重新选择文件。');
             return;
           }
           setError(stringifyError(err, '导入状态获取失败，请稍后重试。'));
@@ -115,21 +139,27 @@ export const EpubImportModal: React.FC<{
     setError(undefined);
     setTitle('');
     setAuthors('');
+    setSourceFormat('epub');
+    setTxtEncoding('utf-8');
+    setParagraphMode('auto');
   };
 
   const handleClose = () => {
     uploadAborter.current?.abort();
     if (session?.id && session.status !== 'completed') {
-      void axios.post(`/api/import/epub/${session.id}/cancel`).catch(() => {});
+      void axios.post(`/api/import/${session.id}/cancel`).catch(() => {});
     }
     onClose();
+    reset();
   };
 
   const beforeUpload: UploadProps['beforeUpload'] = (file) => {
-    if (!file.name.toLowerCase().endsWith('.epub')) {
-      setError('仅支持 EPUB 文件。');
+    const lower = file.name.toLowerCase();
+    if (!lower.endsWith('.epub') && !lower.endsWith('.txt')) {
+      setError('仅支持 EPUB 或 TXT 文件。');
       return Upload.LIST_IGNORE;
     }
+    setSourceFormat(lower.endsWith('.txt') ? 'txt' : 'epub');
     setError(undefined);
     setUploadFile({
       uid: file.uid,
@@ -141,7 +171,7 @@ export const EpubImportModal: React.FC<{
 
   const handleStart = async () => {
     if (!uploadOrigin) {
-      setError('请先选择一个 EPUB 文件。');
+      setError('请先选择一个 EPUB 或 TXT 文件。');
       return;
     }
     setUploading(true);
@@ -153,7 +183,7 @@ export const EpubImportModal: React.FC<{
     uploadAborter.current = controller;
     try {
       const { data } = await axios.post<EpubImportStartResponse>(
-        '/api/import/epub',
+        `/api/import/${sourceFormat}`,
         body,
         {
           signal: controller.signal,
@@ -165,6 +195,7 @@ export const EpubImportModal: React.FC<{
         }
       );
       if (data.existing_novel_id) {
+        reset();
         navigate(`/novel/${data.existing_novel_id}`);
         onClose();
         return;
@@ -174,6 +205,7 @@ export const EpubImportModal: React.FC<{
       }
       setSession({
         id: data.session_id,
+        source_format: sourceFormat,
         status: 'analyzing',
         original_name: uploadOrigin.name,
         file_size: uploadOrigin.size,
@@ -183,7 +215,7 @@ export const EpubImportModal: React.FC<{
       });
     } catch (err) {
       if (!controller.signal.aborted) {
-        setError(stringifyError(err, '上传 EPUB 失败，请稍后重试。'));
+        setError(stringifyError(err, '上传文件失败，请稍后重试。'));
       }
     } finally {
       uploadAborter.current = undefined;
@@ -197,7 +229,7 @@ export const EpubImportModal: React.FC<{
       return;
     }
     try {
-      await axios.post(`/api/import/epub/${session.id}/cancel`);
+      await axios.post(`/api/import/${session.id}/cancel`);
       setSession((current) =>
         current ? { ...current, status: 'canceled', error: undefined } : current
       );
@@ -211,7 +243,7 @@ export const EpubImportModal: React.FC<{
     try {
       setError(undefined);
       const { data } = await axios.post<EpubImportStartResponse>(
-        `/api/import/epub/${session.id}/commit`,
+        `/api/import/${session.id}/commit`,
         {
           title: title.trim(),
           authors: authors.trim(),
@@ -232,6 +264,29 @@ export const EpubImportModal: React.FC<{
     }
   };
 
+  const handleReanalyze = async () => {
+    if (!session?.id) return;
+    try {
+      setError(undefined);
+      const { data } = await axios.post<EpubImportStartResponse>(
+        `/api/import/${session.id}/reanalyze`,
+        {
+          encoding: txtEncoding,
+          paragraph_mode: paragraphMode,
+          unwrap_lines: true,
+        }
+      );
+      setSession((current) => current ? {
+        ...current,
+        status: 'analyzing',
+        analyze_job_id: data.job_id,
+        progress: 0,
+      } : current);
+    } catch (err) {
+      setError(stringifyError(err, '更新 TXT 预览失败，请稍后重试。'));
+    }
+  };
+
   const footer = (() => {
     if (uploading || active) {
       return (
@@ -248,6 +303,7 @@ export const EpubImportModal: React.FC<{
             type="primary"
             icon={<CheckCircleOutlined />}
             onClick={handleCommit}
+            disabled={preview?.can_commit === false}
           >
             确认导入
           </Button>
@@ -286,7 +342,7 @@ export const EpubImportModal: React.FC<{
   return (
     <Modal
       open={open}
-      title="导入 EPUB"
+      title="导入本地书籍"
       width={560}
       destroyOnHidden
       footer={footer}
@@ -305,7 +361,7 @@ export const EpubImportModal: React.FC<{
 
       {!session && !uploading && (
         <Dragger
-          accept="application/epub+zip"
+          accept=".epub,.txt,application/epub+zip,text/plain"
           beforeUpload={beforeUpload}
           fileList={uploadFile ? [uploadFile] : []}
           maxCount={1}
@@ -319,8 +375,8 @@ export const EpubImportModal: React.FC<{
           <p className="ant-upload-drag-icon">
             <InboxOutlined />
           </p>
-          <p className="ant-upload-text">将 EPUB 文件拖到这里</p>
-          <p className="ant-upload-hint">或点击选择文件，单个文件最大 100 MB</p>
+          <p className="ant-upload-text">将 EPUB 或 TXT 文件拖到这里</p>
+          <p className="ant-upload-hint">EPUB 最大 50 MB；TXT 最大 20 MB</p>
         </Dragger>
       )}
 
@@ -345,7 +401,7 @@ export const EpubImportModal: React.FC<{
             {session.phase || '正在准备分析……'}
           </Typography.Text>
           <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
-            分析可能需要一些时间，遇到复杂 EPUB 时请耐心等待。
+            分析可能需要一些时间，遇到复杂文件时请耐心等待。
           </Typography.Paragraph>
         </Card>
       )}
@@ -371,6 +427,38 @@ export const EpubImportModal: React.FC<{
               },
             ]}
           />
+          {session.source_format === 'txt' && (
+            <Card size="small" title="TXT 排版设置">
+              <Space vertical style={{ width: '100%' }}>
+                <Typography.Text>文字编码</Typography.Text>
+                <Select
+                  value={txtEncoding}
+                  onChange={setTxtEncoding}
+                  options={Array.from(new Set([
+                    preview.encoding?.selected || 'utf-8',
+                    ...(preview.encoding?.candidates || []),
+                    'utf-8', 'gb18030', 'utf-16-le', 'utf-16-be',
+                  ])).map((value) => ({ value, label: value }))}
+                />
+                <Typography.Text>段落整理</Typography.Text>
+                <Select
+                  value={paragraphMode}
+                  onChange={setParagraphMode}
+                  options={[
+                    { value: 'auto', label: '自动判断' },
+                    { value: 'block', label: '空行分段' },
+                    { value: 'print', label: '首行缩进分段' },
+                    { value: 'single', label: '每行一段' },
+                    { value: 'unformatted', label: '保留原始换行' },
+                  ]}
+                />
+                <Button onClick={handleReanalyze}>更新预览</Button>
+                {preview.encoding?.requires_confirmation && (
+                  <Alert type="warning" showIcon title="编码识别结果不够确定，请选择编码并更新预览。" />
+                )}
+              </Space>
+            </Card>
+          )}
           <div>
             <Typography.Text strong>书名</Typography.Text>
             <Input
@@ -419,7 +507,7 @@ export const EpubImportModal: React.FC<{
           title={
             session.status === 'canceled'
               ? '导入已取消。'
-              : session.error || '这个 EPUB 暂时无法导入。'
+              : session.error || '这个文件暂时无法导入。'
           }
         />
       )}

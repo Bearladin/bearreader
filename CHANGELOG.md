@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **A close confirmation before the app window shuts** — Clicking X or Alt+F4 in app mode first asks the browser's leave-confirmation dialog, so an accidental click cannot kill a running reading or download session; a "关闭时确认" switch in the reader settings (on by default) turns it off. The service worker's self-reload on updates stays silent — it is lossless and must not ask.
 - **The app-mode browser no longer bloats the data directory** — The window is an Edge app profile that used to accumulate hundreds of MB of wallet/shopping/visual-search components and update caches inside the app data folder; launch flags now disable those side components while keeping rendering, cookies, sessions and Safe Browsing untouched.
 - **本地 EPUB 导入** — “全部小说”支持拖拽或文件选择导入单个 EPUB，导入前可预览并编辑书名/作者；有封面时提取保存，无封面时使用动态占位封面，完成后直接打开小说详情。
+- **本地 TXT 导入** — 支持编码确认、章节识别和五种段落整理方式，按字节范围逐章写入现有阅读器。
 
 ### Fixed
 
@@ -21,6 +22,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **An empty source registry can no longer masquerade as a healthy startup** — A damaged or quarantined source bundle now fails before replacing the active registry, reload failures keep the previous sources live, and the health endpoint reports loaded crawler and domain counts.
 - **Windows startup now uses UTF-8 and preserves failure diagnostics** — Both bundled executables enable Python's UTF-8 mode before interpreter startup, while desktop launch failures and missing browser windows write a bounded UTF-8 log under the application data directory for troubleshooting paths on any Windows locale.
 - **The job scrubber no longer crashes on stuck legacy jobs** — A root job left unfinished by an older version (e.g. killed mid-run) crashed the background scrubber loop forever with "Only finished jobs can be deleted", halting every cleanup duty; the delete pass now selects finished jobs only, and stuck jobs of any state are cancelled after 16 hours so they get reaped on the next pass.
+- **EPUB 导入限制资源占用并拒绝媒体内容** — 上传限制为 50 MB、解压限制为 100 MB，分析阶段拒绝音视频和脚本，提交阶段只读取正文与实际引用的静态插图。
+- **前端分包加载失败可以自恢复** — 首次 preload 路由错误静默刷新，重复失败显示同步中文错误页，并避免服务工作线程刷新形成循环。
 
 ## [1.3.1] - 2026-08-31
 

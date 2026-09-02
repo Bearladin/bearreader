@@ -109,7 +109,7 @@ export const NovelListPage: React.FC<any> = () => {
             icon={<UploadOutlined />}
             onClick={() => setImportOpen(true)}
           >
-            导入 EPUB
+            导入书籍
           </Button>
           <Segmented
             aria-label="切换小说显示方式"

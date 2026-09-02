@@ -3,6 +3,14 @@
 
 declare module 'moment/locale/zh-cn.js';
 
+interface VitePreloadErrorEvent extends Event {
+  payload: unknown;
+}
+
+interface WindowEventMap {
+  'vite:preloadError': VitePreloadErrorEvent;
+}
+
 declare module 'virtual:pwa-register' {
   export function registerSW(options?: {
     immediate?: boolean;

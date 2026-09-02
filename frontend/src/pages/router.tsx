@@ -3,6 +3,7 @@ import { LoadingState } from '@/components/Loading/LoadingState';
 import { AuthLayout, MainLayout, ReaderLayout } from '@/components/Layout';
 import { lazy, Suspense } from 'react';
 import { Navigate, type RouteObject } from 'react-router-dom';
+import { RouteErrorPage } from './RouteErrorPage';
 
 const ChangelogPage = lazy(() =>
   import('./Changelog').then((m) => ({ default: m.ChangelogPage }))
@@ -75,6 +76,7 @@ export const AUTH_ROUTES: RouteObject[] = [
   {
     path: '/',
     element: <AuthLayout />,
+    errorElement: <RouteErrorPage />,
     children: [
       {
         path: '',
@@ -100,6 +102,7 @@ export const USER_ROUTES: RouteObject[] = [
   {
     path: '/',
     element: <MainLayout />,
+    errorElement: <RouteErrorPage />,
     children: [
       {
         path: '',
@@ -167,6 +170,7 @@ export const USER_ROUTES: RouteObject[] = [
   {
     path: 'read',
     element: <ReaderLayout />,
+    errorElement: <RouteErrorPage />,
     children: [
       {
         path: ':id',
@@ -181,6 +185,7 @@ export const ADMIN_ROUTES: RouteObject[] = [
   {
     path: '/admin',
     element: <MainLayout />,
+    errorElement: <RouteErrorPage />,
     children: [
       {
         path: 'users',
