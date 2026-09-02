@@ -160,7 +160,7 @@ export const JobDetailsPage: React.FC<any> = () => {
     <Space vertical size={lg ? 'middle' : 'small'}>
       {job.parent_job_id ? (
         <Link to={`/job/${job.parent_job_id}`}>
-          <LeftOutlined /> 父任务请求
+          <LeftOutlined /> 上级任务请求
         </Link>
       ) : (
         <Link to={`/jobs`}>
