@@ -14,7 +14,7 @@ from ..distribution import DISTRIBUTION
 from ..exceptions import ServerErrors, get_exception_handlers
 from .api import router as api
 from .api.translator import TranslatorDashboard
-from .lifecycle import mark_bye
+from .lifecycle import mark_bye, mark_heartbeat, mark_ready
 from .middleware.staticfiles import CustomStaticFiles, StaticFilesGuard
 
 web_dir = (Path(__file__).parent / "web").absolute()
@@ -118,6 +118,23 @@ async def app_bye():
     stop a running app while its window is still open).
     """
     mark_bye()
+    return {"ok": True}
+
+
+@app.post("/api/app/ready/{session_id}", include_in_schema=False)
+async def app_ready(session_id: str):
+    """App-mode page announces itself after load (lifecycle rework step 1).
+
+    Diagnostics only — no exit decision consumes session data yet.
+    """
+    mark_ready(session_id)
+    return {"ok": True}
+
+
+@app.post("/api/app/heartbeat/{session_id}", include_in_schema=False)
+async def app_heartbeat(session_id: str):
+    """5-second liveness heartbeat from the app-mode page (diagnostics only)."""
+    mark_heartbeat(session_id)
     return {"ok": True}
 
 

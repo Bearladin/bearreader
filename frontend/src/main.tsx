@@ -76,7 +76,28 @@ installPreloadRecovery({
 // path) must NOT send this — its close is not "app closed". sendBeacon keeps
 // the POST alive during unload; the backend only marks a timestamp and the
 // keep-alive loop still verifies the window title is gone before exiting.
+//
+// ready/heartbeat (lifecycle rework step 1): diagnostics-only session
+// reporting. The backend records but no exit decision consumes it yet —
+// this batch exists so the state-machine step has real data to build on.
+let appSessionId = '';
+try {
+  appSessionId = window.sessionStorage.getItem('bearreader/app-session') ?? '';
+  if (!appSessionId) {
+    appSessionId = crypto.randomUUID();
+    window.sessionStorage.setItem('bearreader/app-session', appSessionId);
+  }
+} catch {
+  appSessionId = crypto.randomUUID(); // storage unavailable: per-page id
+}
+
 if (new URLSearchParams(window.location.search).has('app')) {
+  navigator.sendBeacon(`/api/app/ready/${appSessionId}`);
+  const heartbeat = () => {
+    navigator.sendBeacon(`/api/app/heartbeat/${appSessionId}`);
+  };
+  heartbeat();
+  window.setInterval(heartbeat, 5000);
   window.addEventListener('beforeunload', () => {
     navigator.sendBeacon('/api/app/bye');
   });
