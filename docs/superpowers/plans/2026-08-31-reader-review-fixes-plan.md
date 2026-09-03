@@ -189,7 +189,7 @@ Stop the development process by its specific PID after validation.
 
 ## 13. Export and Verify the Git Patch
 
-**Output directory:** `C:\Users\REDACTED\Desktop\markdown`
+**Output directory:** the maintainer's local handoff directory
 
 1. Export the one completed commit with `git format-patch -1 --binary`. Use a filename that
    includes the feature and short commit SHA, for example:
@@ -213,7 +213,7 @@ the patch because Git never includes `.git` state.
 
 ## 14. Write the Chinese Handoff Document
 
-**Output:** `C:\Users\REDACTED\Desktop\markdown\BearReader-阅读器审核修复交接-2026-08-31.md`
+**Output:** `BearReader-阅读器审核修复交接-2026-08-31.md` in the maintainer's local handoff directory
 
 Write the report after the commit and patch exist so all identifiers are final. Include:
 

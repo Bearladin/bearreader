@@ -58,7 +58,7 @@
 **Files:**
 - Generate: `lncrawl/server/web/`
 - Modify: `frontend-manifest.json`
-- Modify: `C:/Users/REDACTED/Desktop/markdown/0903/PATCH4/BearReader-完整交接-2026-09-03-PATCH1-PATCH2-PATCH3-PATCH4.md`
+- Modify: the consolidated 0903 handoff document (BearReader-完整交接-2026-09-03-PATCH1-PATCH2-PATCH3-PATCH4.md)
 
 **Interfaces:**
 - Produces: one PATCH4, one cumulative 1.3.4 portable ZIP and one cumulative handoff document.

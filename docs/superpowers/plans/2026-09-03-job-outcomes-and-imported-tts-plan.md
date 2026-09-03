@@ -103,4 +103,4 @@
 - [ ] Run repository lint and targeted runtime checks.
 - [ ] Review the diff for scope, secrets and generated-file consistency.
 - [ ] Commit with the explicitly requested Bearladin identity without pushing.
-- [ ] Build and inspect the portable ZIP, generate PATCH3, and update the consolidated handoff document in `C:\Users\REDACTED\Desktop\markdown\0903\PATCH3`.
+- [ ] Build and inspect the portable ZIP, generate PATCH3, and update the consolidated handoff document in the local PATCH3 handoff directory.
