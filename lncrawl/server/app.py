@@ -109,33 +109,26 @@ async def health():
     }
 
 
-@app.post("/api/app/bye", include_in_schema=False)
-async def app_bye():
+@app.post("/api/app/bye/{session_id}", include_in_schema=False)
+async def app_bye(session_id: str):
     """Window-closing beacon sent by the app-mode page via sendBeacon.
 
-    Only marks a timestamp; the desktop keep-alive loop decides to exit after
-    it AND the window title is gone (so a stray call from a local page cannot
-    stop a running app while its window is still open).
+    Unknown sessions are ignored, so another local page cannot stop the
+    launcher by posting a guessed close signal.
     """
-    mark_bye()
-    return {"ok": True}
+    return {"ok": mark_bye(session_id)}
 
 
 @app.post("/api/app/ready/{session_id}", include_in_schema=False)
 async def app_ready(session_id: str):
-    """App-mode page announces itself after load (lifecycle rework step 1).
-
-    Diagnostics only — no exit decision consumes session data yet.
-    """
-    mark_ready(session_id)
-    return {"ok": True}
+    """App-mode page announces itself for the launcher-issued session."""
+    return {"ok": mark_ready(session_id)}
 
 
 @app.post("/api/app/heartbeat/{session_id}", include_in_schema=False)
 async def app_heartbeat(session_id: str):
-    """5-second liveness heartbeat from the app-mode page (diagnostics only)."""
-    mark_heartbeat(session_id)
-    return {"ok": True}
+    """Five-second fallback lease for a page without a trustworthy HWND."""
+    return {"ok": mark_heartbeat(session_id)}
 
 
 # Mount frontend

@@ -1,6 +1,8 @@
 from contextlib import suppress
 import hashlib
 import logging
+import os
+import secrets
 import subprocess
 import sys
 from threading import Thread
@@ -20,7 +22,13 @@ from ..startup_diagnostics import (
 )
 from ..utils.platforms import Screen
 from ..utils.sockets import free_port
-from .lifecycle import bye_received
+from .lifecycle import (
+    closing_requested,
+    configure_session,
+    heartbeat_age,
+    heartbeat_recent,
+    ready_received,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +43,17 @@ READY_TIMEOUT = 120.0
 # exits within it, so this is a grace period, not a hard failure.
 LAUNCH_GRACE = 10.0
 
+HEARTBEAT_CLOSE_AFTER = 10.0
+HEARTBEAT_LOST_AFTER = 15.0
+RESUME_GRACE = 8.0
+SERVER_STOP_TIMEOUT = 5.0
+POLL_INTERVAL = 0.25
+PROFILE_PID_REFRESH = 1.0
+
 _SPINNER = "|/-\\"
+
+_profile_pid_cache_at = 0.0
+_profile_pid_cache: set[int] = set()
 
 
 class FallbackException(Exception):
@@ -46,6 +64,78 @@ class FallbackException(Exception):
 # ---------------------------------------------------------------------------
 # Single-instance guard (Windows frozen desktop path only)
 # ---------------------------------------------------------------------------
+
+
+def _instance_digest() -> str:
+    return hashlib.sha1(
+        str(ctx.config.app.app_dir.resolve()).strip("\\/").lower().encode("utf-8")
+    ).hexdigest()[:16]
+
+
+def _instance_object_name(kind: str) -> str:
+    return f"Global\\XiaoXiongNovel-{_instance_digest()}-{kind}"
+
+
+class _InstanceSignals:
+    """One-way second-launch request plus an acknowledgement for activation."""
+
+    def __init__(self) -> None:
+        self.request = None
+        self.accepted = None
+        if sys.platform != "win32":
+            return
+        import ctypes
+
+        ctypes.windll.kernel32.CreateEventW.restype = ctypes.c_void_p
+        self.request = ctypes.windll.kernel32.CreateEventW(
+            None, False, False, _instance_object_name("activate")
+        )
+        self.accepted = ctypes.windll.kernel32.CreateEventW(
+            None, False, False, _instance_object_name("activated")
+        )
+
+    def requested(self) -> bool:
+        if self.request is None:
+            return False
+        import ctypes
+
+        return ctypes.windll.kernel32.WaitForSingleObject(self.request, 0) == 0
+
+    def acknowledge(self) -> None:
+        if self.accepted is None:
+            return
+        import ctypes
+
+        ctypes.windll.kernel32.SetEvent(self.accepted)
+
+
+def _notify_existing_instance() -> bool:
+    """Ask the old launcher to focus its live page or accelerate shutdown."""
+    if sys.platform != "win32":
+        return False
+    import ctypes
+
+    kernel32 = ctypes.windll.kernel32
+    kernel32.OpenEventW.restype = ctypes.c_void_p
+    event_modify_state = 0x0002
+    synchronize = 0x00100000
+    request = kernel32.OpenEventW(event_modify_state, False, _instance_object_name("activate"))
+    accepted = kernel32.OpenEventW(
+        event_modify_state | synchronize, False, _instance_object_name("activated")
+    )
+    if not request or not accepted:
+        if request:
+            kernel32.CloseHandle(request)
+        if accepted:
+            kernel32.CloseHandle(accepted)
+        return False
+    try:
+        kernel32.ResetEvent(accepted)
+        kernel32.SetEvent(request)
+        return kernel32.WaitForSingleObject(accepted, 1500) == 0
+    finally:
+        kernel32.CloseHandle(request)
+        kernel32.CloseHandle(accepted)
 
 
 def _acquire_single_instance_lock() -> "Optional[object]":
@@ -63,14 +153,10 @@ def _acquire_single_instance_lock() -> "Optional[object]":
 
     import ctypes
 
-    # Normalize the data directory so different string spellings of the same
-    # folder (trailing slash, case) produce the same mutex name.
-    digest = hashlib.sha1(
-        str(ctx.config.app.app_dir.resolve()).strip("\\/").lower().encode("utf-8")
-    ).hexdigest()[:16]
-    name = f"Global\\XiaoXiongNovel-{digest}"
+    name = _instance_object_name("mutex")
 
     # ERROR_ALREADY_EXISTS = 183
+    ctypes.windll.kernel32.CreateMutexW.restype = ctypes.c_void_p
     handle = ctypes.windll.kernel32.CreateMutexW(None, False, name)
     if not handle:
         return object()  # API failure: don't block the app
@@ -179,6 +265,7 @@ def _start_server(
     host: str,
     port: int,
     startup_log_handler: StartupLogCapture,
+    server_control: dict,
 ) -> None:
     from ..commands.server import run_server
 
@@ -192,7 +279,24 @@ def _start_server(
         watch=False,
         workers=1,
         startup_log_handler=startup_log_handler,
+        on_server_created=lambda server: server_control.__setitem__("server", server),
     )
+
+
+def _stop_server(server_control: dict, server_thread: Thread) -> None:
+    """Cooperatively stop desktop work, then give lifespan five seconds."""
+    with suppress(Exception):
+        if "scheduler" in ctx.__dict__:
+            ctx.scheduler.request_desktop_shutdown()
+    server = server_control.get("server")
+    if server is not None:
+        server.should_exit = True
+    server_thread.join(timeout=SERVER_STOP_TIMEOUT)
+    if server_thread.is_alive():
+        logger.warning(
+            f"Desktop cleanup exceeded {SERVER_STOP_TIMEOUT:.0f}s; "
+            "the daemon server thread will end with this BearReader process"
+        )
 
 
 def _wait_for_ready(
@@ -252,13 +356,13 @@ def _wait_for_ready(
     ) from last_error
 
 
-def _build_url(host: str, port: int) -> str:
+def _build_url(host: str, port: int, session_id: str) -> str:
     token = ctx.users.generate_token(
         user=ctx.users.get_admin(),
         expiry_minutes=1 * 365 * 24 * 60,  # 1 year
         scopes=[UserRole.LOCAL],
     )
-    return f"http://{host}:{port}/?authToken={token}"
+    return f"http://{host}:{port}/?authToken={token}&app=1&appSession={session_id}"
 
 
 # ---------------------------------------------------------------------------
@@ -266,10 +370,11 @@ def _build_url(host: str, port: int) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _launch_app_window(url: str, manage_console: bool) -> None:
-    # Tag the app-mode URL so the frontend can distinguish it from a plain
-    # browser tab (fallback path) — only app-mode pages send the close beacon.
-    url = url + "&app=1"
+def _launch_app_window(
+    url: str,
+    manage_console: bool,
+    instance_signals: _InstanceSignals,
+) -> None:
     binaries = find_chromium()
     if not binaries:
         raise FallbackException("No Chromium-based browser found")
@@ -320,12 +425,17 @@ def _launch_app_window(url: str, manage_console: bool) -> None:
     # window can be open even though the launched process is gone. Do not judge
     # failure from the launcher's exit: watch for the app window instead.
     grace_deadline = time.monotonic() + LAUNCH_GRACE
+    trusted_hwnd: Optional[int] = None
     while time.monotonic() < grace_deadline:
+        trusted_hwnd = _find_trusted_app_window(proc)
+        if trusted_hwnd is not None:
+            break
         code = proc.poll()
         if code is not None:
             logger.warning(f"Browser launcher exited early (code={code})")
             _keep_alive(
                 url,
+                instance_signals=instance_signals,
                 launch_diagnostic=f"Launcher: {launched_binary}; exit code: {code}.",
             )
             return
@@ -339,9 +449,12 @@ def _launch_app_window(url: str, manage_console: bool) -> None:
     else:
         _status("Keep this window open. Closing it stops the server.")
 
-    # Primary exit signal is the browser process tree using our app profile
-    # (see _keep_alive); the title match is only a fallback.
-    _keep_alive(url, appeared_initial=True, proc=proc)
+    _keep_alive(
+        url,
+        proc=proc,
+        instance_signals=instance_signals,
+        initial_trusted_hwnd=trusted_hwnd,
+    )
     logger.info(f"Closed app (pid={proc.pid})")
 
 
@@ -362,48 +475,43 @@ def _notify_url(url: str) -> None:
         _status(f"Open the app in your browser: {url}")
 
 
-def _window_title_visible(title: str) -> bool:
-    """True while any visible window or tab shows the app title.
+def _profile_browser_pids() -> set[int]:
+    """Query app-profile owners without flashing a PowerShell window."""
+    global _profile_pid_cache_at, _profile_pid_cache
+    now = time.monotonic()
+    if now - _profile_pid_cache_at < PROFILE_PID_REFRESH:
+        return set(_profile_pid_cache)
+    _profile_pid_cache_at = now
 
-    Hung foreign windows are skipped first: GetWindowTextW blocks on them,
-    and one hung window would freeze the whole keep-alive loop (the 1.1.3
-    gray-screen family of deadlocks).
-    """
-    import ctypes
+    profile = str((ctx.config.app.app_dir / "app-browser").resolve()).replace("'", "''")
+    script = (
+        f"$profile = '{profile}'; "
+        "Get-CimInstance Win32_Process | Where-Object { "
+        "$_.Name -match '^(msedge|chrome|msedgeproxy)\\.exe$' -and "
+        "$_.CommandLine -like ('*' + $profile + '*') "
+        "} | Select-Object -ExpandProperty ProcessId"
+    )
+    try:
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-Command", script],
+            capture_output=True,
+            timeout=3,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        if result.returncode == 0:
+            output = result.stdout.decode("utf-8", errors="replace")
+            _profile_pid_cache = {
+                int(line) for line in output.splitlines() if line.strip().isdigit()
+            }
+    except (OSError, subprocess.SubprocessError):
+        logger.debug("Could not refresh app-profile browser PIDs", exc_info=True)
+    return set(_profile_pid_cache)
 
-    user32 = ctypes.windll.user32
-    found = False
 
-    @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
-    def _probe(hwnd, _):
-        nonlocal found
-        if not user32.IsWindowVisible(hwnd) or user32.IsHungAppWindow(hwnd):
-            return True
-        buffer = ctypes.create_unicode_buffer(256)
-        user32.GetWindowTextW(hwnd, buffer, 256)
-        if title in buffer.value:
-            found = True
-            return False
-        return True
-
-    user32.EnumWindows(_probe, 0)
-    return found
-
-
-def _app_profile_running() -> bool:
-    """True while any browser process still uses our app profile directory.
-
-    Edge/Chrome app-mode windows may be hosted by a process other than the
-    one we spawned (launcher handoff); every process of that window shares
-    the --user-data-dir we passed, so scanning command lines for the profile
-    path is a reliable "is our window's browser alive" check that never
-    false-positives on unrelated windows.
-
-    Implementation note: must NOT spawn powershell.exe — this runs every
-    2 seconds and each child console flashes a black DOS window on the
-    user's desktop. Pure Win32 via ctypes (NtQuerySystemInformation-style
-    process snapshot) keeps it silent and cheap.
-    """
+def _trusted_browser_pids(proc: "Optional[subprocess.Popen]" = None) -> set[int]:
+    """Return Chromium processes in this BearReader launcher's process tree."""
+    if sys.platform != "win32":
+        return {proc.pid} if proc is not None and proc.poll() is None else set()
     import ctypes
 
     class PROCESSENTRY32W(ctypes.Structure):
@@ -420,14 +528,11 @@ def _app_profile_running() -> bool:
             ("szExeFile", ctypes.c_wchar * 260),
         ]
 
-    # We cannot read another process's command line without WMI, but we CAN
-    # check the browser child(ren) of OUR process: Edge handoff keeps the
-    # window inside processes that are our direct or transitive children.
-    # Combine: (a) our spawned proc alive, or (b) any msedge.exe descendant.
     kernel32 = ctypes.windll.kernel32
+    kernel32.CreateToolhelp32Snapshot.restype = ctypes.c_void_p
     snapshot = kernel32.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
-    if snapshot == -1 or snapshot == 0xFFFFFFFF:
-        return False
+    if snapshot in (-1, 0, 0xFFFFFFFF, ctypes.c_void_p(-1).value):
+        return set()
 
     entry = PROCESSENTRY32W()
     entry.dwSize = ctypes.sizeof(PROCESSENTRY32W)
@@ -444,91 +549,144 @@ def _app_profile_running() -> bool:
         ok = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
     kernel32.CloseHandle(snapshot)
 
-    # BFS from our own pid looking for a browser process in the subtree
-    import os
-
+    # Seed the launched PID even after it exits: Windows keeps that PID as the
+    # parent id on surviving Chromium children, which is the common launcher
+    # hand-off case this function must follow.
     frontier = [os.getpid()]
+    if proc is not None:
+        frontier.append(proc.pid)
     seen: set[int] = set()
     while frontier:
         current = frontier.pop()
         if current in seen:
             continue
         seen.add(current)
-        if current in edges:
-            return True
         frontier.extend(children.get(current, []))
-    return False
+    trusted = seen & edges
+    if proc is not None and proc.poll() is None:
+        trusted.add(proc.pid)
+    trusted.update(_profile_browser_pids())
+    return trusted
+
+
+def _find_trusted_app_window(
+    proc: "Optional[subprocess.Popen]" = None,
+    known_hwnd: "Optional[int]" = None,
+) -> "Optional[int]":
+    """Find the exact BearReader HWND owned by this launcher's browser tree."""
+    if sys.platform != "win32":
+        return None
+    import ctypes
+
+    user32 = ctypes.windll.user32
+
+    def _pid_for(hwnd: int) -> int:
+        pid = ctypes.c_uint32()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        return int(pid.value)
+
+    if known_hwnd and user32.IsWindow(known_hwnd) and user32.IsWindowVisible(known_hwnd):
+        if not user32.IsHungAppWindow(known_hwnd):
+            return known_hwnd
+
+    trusted_pids = _trusted_browser_pids(proc)
+    if not trusted_pids:
+        return None
+
+    found: Optional[int] = None
+
+    @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+    def _probe(hwnd, _):
+        nonlocal found
+        hwnd_value = int(hwnd or 0)
+        if (
+            not user32.IsWindowVisible(hwnd_value)
+            or user32.IsHungAppWindow(hwnd_value)
+            or _pid_for(hwnd_value) not in trusted_pids
+        ):
+            return True
+        buffer = ctypes.create_unicode_buffer(256)
+        user32.GetWindowTextW(hwnd_value, buffer, 256)
+        title = buffer.value
+        if title == APP_NAME or title.startswith(f"{APP_NAME} v"):
+            found = hwnd_value
+            return False
+        return True
+
+    user32.EnumWindows(_probe, 0)
+    return found
+
+
+def _focus_window(hwnd: int) -> None:
+    if sys.platform != "win32":
+        return
+    import ctypes
+
+    user32 = ctypes.windll.user32
+    user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+    user32.SetForegroundWindow(hwnd)
 
 
 def _keep_alive(
     url: str,
-    appeared_initial: bool = False,
     proc: "Optional[subprocess.Popen]" = None,
+    instance_signals: "Optional[_InstanceSignals]" = None,
+    initial_trusted_hwnd: "Optional[int]" = None,
     launch_diagnostic: str = "",
 ) -> None:
-    """The windowed build has no console input.
-
-    Exit conditions, in priority order:
-    1. The launched browser process (or its whole app-window process tree)
-       is gone — the user closed the window. This is the PRIMARY signal; the
-       global title match below is only a fallback and can false-positive on
-       an unrelated window whose title happens to contain the app name
-       (e.g. an Explorer window opened on the dist folder) — that false
-       positive once kept a closed app "alive" and blocked relaunches.
-    2. The page's closing beacon (bye) plus the title being gone — fast path
-       that avoids waiting CLOSED_AFTER.
-    3. The title staying unseen for CLOSED_AFTER seconds (fallback when the
-       launcher process exited early but the window lives in a child).
-    If nothing ever appeared, notify late and wind down after 5 minutes.
-    """
-    title = DISTRIBUTION.display_name
-    appeared = appeared_initial
+    """Keep the server alive from trusted HWND evidence or a soft page lease."""
     notified = False
     started = time.monotonic()
-    last_seen = started if appeared_initial else None
-    # How long the title must stay unseen before we conclude the user closed
-    # the window. 8s = 4 polling rounds; kept short so the single-instance
-    # mutex of a relaunch doesn't block for long (was 20s).
-    CLOSED_AFTER = 8.0
-    # Zombie bailout: on some machines every exit signal misfires at once
-    # (browser handed the window to an unrelated-looking process, title
-    # probing finds a same-named foreign window, the bye beacon never
-    # arrives). The loop must never hang forever holding the single-instance
-    # mutex — after this long without a window sighting, wind down and let
-    # the diagnostic tell the user what happened. 2 minutes is long enough
-    # to ride out a temporarily hung window (IsHungAppWindow skips those),
-    # and short enough that "closed, then relaunched" recovers quickly.
-    ZOMBIE_AFTER = 2 * 60.0
-    zombie_logged = False
-
-    def _browser_alive() -> bool:
-        # True while the browser we launched (or a descendant holding the
-        # app window) is still running. Windows Popen.poll() only covers the
-        # direct child; Edge hands the window to a sibling process sharing
-        # the same --user-data-dir, so also scan for any process using it.
-        if proc is not None and proc.poll() is None:
-            return True
-        return _app_profile_running()
+    last_poll = started
+    resume_grace_until = started
+    trusted_hwnd = initial_trusted_hwnd
+    trusted_window_seen = trusted_hwnd is not None
+    page_seen = trusted_window_seen
 
     while True:
-        if appeared and not _browser_alive():
-            return  # our browser (window holder) is gone
+        now = time.monotonic()
+        if now - last_poll > HEARTBEAT_LOST_AFTER:
+            # The monitor itself was suspended (sleep/lock/RDP transition).
+            # Give the page time to emit its focus/pageshow recovery beat.
+            resume_grace_until = now + RESUME_GRACE
+        last_poll = now
 
-        # Window-closing beacon: exits only when the page signalled bye AND
-        # the title stays gone — a page refresh also fires beforeunload and
-        # would otherwise kill a live app. Window probing is safe now
-        # (IsHungAppWindow guard above), so the double check is enough.
-        if appeared and bye_received() and not _window_title_visible(title):
-            time.sleep(0.5)
-            if bye_received() and not _window_title_visible(title):
+        found_hwnd = _find_trusted_app_window(proc, trusted_hwnd)
+        if found_hwnd is not None:
+            trusted_hwnd = found_hwnd
+            trusted_window_seen = True
+            page_seen = True
+        browser_alive = bool(_trusted_browser_pids(proc))
+
+        if instance_signals is not None and instance_signals.requested():
+            if closing_requested():
+                logger.info("Second launch accelerated a pending desktop close")
+                return
+            if found_hwnd is not None:
+                _focus_window(found_hwnd)
+                instance_signals.acknowledge()
+            elif heartbeat_recent(now=now):
+                # Chromium handed the window to a process outside our tree;
+                # the live lease still proves an existing page owns this run.
+                instance_signals.acknowledge()
+            else:
+                logger.info("Second launch requested takeover after the app window closed")
                 return
 
-        found = _window_title_visible(title)
-        now = time.monotonic()
-        if found:
-            appeared = True
-            last_seen = now
-        elif not appeared and not notified and now - started > 20:
+        if trusted_window_seen and found_hwnd is None:
+            if closing_requested() or not browser_alive:
+                return
+
+        age = heartbeat_age(now)
+        if ready_received() or age is not None:
+            page_seen = True
+        if found_hwnd is None and now >= resume_grace_until and age is not None:
+            if closing_requested() and age > HEARTBEAT_CLOSE_AFTER:
+                return
+            if age > HEARTBEAT_LOST_AFTER:
+                return
+
+        if not page_seen and not notified and now - started > 20:
             notified = True
             record_startup_failure(
                 "browser-window",
@@ -536,33 +694,12 @@ def _keep_alive(
                 f"20 seconds. {launch_diagnostic}".strip(),
             )
             _notify_url(url)
-        elif appeared and last_seen is not None and now - last_seen > CLOSED_AFTER:
-            return  # the last window or tab was closed
-        elif not appeared and now - started > 300:
+        elif not page_seen and now - started > 300:
             return  # never opened; wrap up
-        elif (
-            appeared
-            and last_seen is not None
-            and now - last_seen > ZOMBIE_AFTER
-            and _browser_alive()
-            and not zombie_logged
-        ):
-            # The window is long gone but the browser process tree still
-            # holds our app profile: probe failure, not a live session.
-            zombie_logged = True
-            record_startup_failure(
-                "keep-alive",
-                "The app window has not been seen for "
-                f"{int(ZOMBIE_AFTER / 60)} minutes while a browser process is still "
-                "running with the app profile. Exiting to release the single-instance "
-                "lock; if the window was actually open, it will reconnect to a "
-                "restarted server.",
-            )
-            return
-        time.sleep(2)
+        time.sleep(POLL_INTERVAL)
 
 
-def _run_in_system_browser(url: str) -> None:
+def _run_in_system_browser(url: str, instance_signals: _InstanceSignals) -> None:
     _restore_console()
     _line()
     _status("Opening in your default web browser:")
@@ -583,7 +720,7 @@ def _run_in_system_browser(url: str) -> None:
     # Windowed build: watch the browser tab like the app-mode path does, so
     # closing the tab shuts the server down instead of lingering forever
     # (previously `while True: sleep(3600)` left a task-manager-only zombie).
-    _keep_alive(url, appeared_initial=True)
+    _keep_alive(url, instance_signals=instance_signals)
 
 
 def _fatal(
@@ -629,17 +766,21 @@ def start(manage_console: bool = False) -> None:
     when invoked from a real terminal (`lncrawl app`) so the user's shell is
     never hidden."""
     capture = StartupLogCapture()
+    instance_signals = _InstanceSignals()
     if manage_console:
         # Frozen double-click path: refuse to run alongside another desktop
         # instance on the same data directory (scheduler/SQLite corruption).
         if _acquire_single_instance_lock() is None:
-            # The previous instance may just have been closed and is still in
-            # its ~10s wind-down — wait briefly and take over if it exits.
+            if _notify_existing_instance():
+                capture.close()
+                return
+            # A closed instance was told to skip its heartbeat fallback. Poll
+            # frequently so a normal five-second cleanup feels like one launch.
             _status("正在等待上一个实例退出…")
             takeover = False
-            deadline = time.monotonic() + 12.0
+            deadline = time.monotonic() + 8.0
             while time.monotonic() < deadline:
-                time.sleep(1.5)
+                time.sleep(POLL_INTERVAL)
                 if _acquire_single_instance_lock() is not None:
                     takeover = True
                     break
@@ -680,10 +821,11 @@ def start(manage_console: bool = False) -> None:
     port = free_port(host, 31580)
 
     server_error: dict = {}
+    server_control: dict = {}
 
     def _run_server() -> None:
         try:
-            _start_server(host, port, capture)
+            _start_server(host, port, capture, server_control)
         except BaseException as e:
             server_error["error"] = e
             logger.exception("Server thread crashed")
@@ -693,7 +835,9 @@ def start(manage_console: bool = False) -> None:
 
     try:
         _wait_for_ready(host, port, server_error, server_thread)
-        url = _build_url(host, port)
+        session_id = secrets.token_urlsafe(24)
+        configure_session(session_id)
+        url = _build_url(host, port, session_id)
     except Exception as e:
         _fatal("The server failed to start.", e, capture.text())
         capture.close()
@@ -702,12 +846,14 @@ def start(manage_console: bool = False) -> None:
 
     _status("Opening the application window...")
     try:
-        _launch_app_window(url, manage_console)
+        _launch_app_window(url, manage_console, instance_signals)
     except FallbackException as e:
         logger.info(f"App-mode window unavailable: {e}")
-        _run_in_system_browser(url)
+        _run_in_system_browser(url, instance_signals)
     except Exception:
         logger.exception("App window error")
         _restore_console()
         _status("Could not open the app window; using your default browser instead.")
-        _run_in_system_browser(url)
+        _run_in_system_browser(url, instance_signals)
+    finally:
+        _stop_server(server_control, server_thread)

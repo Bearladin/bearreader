@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Security
 
-from ..security import ensure_admin, ensure_user
+from ..security import ensure_admin, ensure_local, ensure_user
 from .admin import router as admin
 from .announcements import router as announcement
 from .artifacts import router as artifact
 from .auth import router as auth
 from .chapters import router as chapter
+from .desktop import router as desktop
 from .feedback import router as feedback
 from .history import router as history
 from .imports import router as imports
@@ -44,6 +45,13 @@ router.include_router(
     prefix="/settings",
     tags=["Settings"],
     dependencies=[Security(ensure_user)],
+)
+
+router.include_router(
+    desktop,
+    prefix="/desktop",
+    tags=["Desktop"],
+    dependencies=[Security(ensure_local)],
 )
 
 router.include_router(

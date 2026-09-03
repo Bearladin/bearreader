@@ -904,6 +904,29 @@ class JobService:
             self._cancel_down(sess, job_id, False)
             sess.commit()
 
+    def cancel_active_for_shutdown(self) -> int:
+        """Persist cancellation for every queued/running desktop job.
+
+        Worker signals are set before this method is called.  Marking the rows
+        here prevents a quick relaunch from reclaiming work that the user
+        explicitly abandoned by closing the desktop application.
+        """
+        now = current_timestamp()
+        with ctx.db.session() as sess:
+            result = sess.exec(
+                sq.update(Job)
+                .where(sq.col(Job.is_done).is_(False))
+                .values(
+                    is_done=True,
+                    status=JobStatus.CANCELED,
+                    error="程序关闭，任务已取消",
+                    started_at=sq.func.coalesce(Job.started_at, now),
+                    finished_at=sq.func.coalesce(Job.finished_at, now),
+                )
+            )
+            sess.commit()
+            return int(result.rowcount or 0)
+
     # -------------------------------------------------------------------------
     #                            Internal Methods
     # -------------------------------------------------------------------------

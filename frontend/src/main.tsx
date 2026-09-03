@@ -18,6 +18,7 @@ import {
   silentReloading,
 } from './utils/silentReload.ts';
 import { appTheme } from './utils/theme.ts';
+import { installExternalLinkHandler } from './utils/openExternal.ts';
 
 // Close-confirmation state. The SW's self-reload is a lossless update
 // (state lives in redux-persist / localStorage), so it must never trip the
@@ -71,36 +72,27 @@ installPreloadRecovery({
   cancelSchedule: (id) => window.clearTimeout(id),
 });
 
-// Desktop window-closing beacon: only in standalone app-mode (Edge --app=,
-// which is tagged with ?app=1 by the launcher). A plain browser tab (fallback
-// path) must NOT send this — its close is not "app closed". sendBeacon keeps
-// the POST alive during unload; the backend only marks a timestamp and the
-// keep-alive loop still verifies the window title is gone before exiting.
-//
-// ready/heartbeat (lifecycle rework step 1): diagnostics-only session
-// reporting. The backend records but no exit decision consumes it yet —
-// this batch exists so the state-machine step has real data to build on.
-let appSessionId = '';
-try {
-  appSessionId = window.sessionStorage.getItem('bearreader/app-session') ?? '';
-  if (!appSessionId) {
-    appSessionId = crypto.randomUUID();
-    window.sessionStorage.setItem('bearreader/app-session', appSessionId);
-  }
-} catch {
-  appSessionId = crypto.randomUUID(); // storage unavailable: per-page id
-}
-
-if (new URLSearchParams(window.location.search).has('app')) {
+// The launcher issues the session id in the app URL. Beacons from stale tabs
+// or other localhost pages therefore cannot extend or terminate this run.
+const appParams = new URLSearchParams(window.location.search);
+const appSessionId = appParams.get('appSession') ?? '';
+if (appParams.has('app') && appSessionId) {
   navigator.sendBeacon(`/api/app/ready/${appSessionId}`);
   const heartbeat = () => {
     navigator.sendBeacon(`/api/app/heartbeat/${appSessionId}`);
   };
   heartbeat();
   window.setInterval(heartbeat, 5000);
-  window.addEventListener('beforeunload', () => {
-    navigator.sendBeacon('/api/app/bye');
+  for (const event of ['focus', 'pageshow', 'online']) {
+    window.addEventListener(event, heartbeat);
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) heartbeat();
   });
+  window.addEventListener('beforeunload', () => {
+    navigator.sendBeacon(`/api/app/bye/${appSessionId}`);
+  });
+  installExternalLinkHandler();
 }
 
 function onBeforeLift() {

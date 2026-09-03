@@ -68,6 +68,12 @@ class __AppContext__:
         return FileService()
 
     @cached_property
+    def desktop(self):
+        from .services.desktop import DesktopService
+
+        return DesktopService()
+
+    @cached_property
     def book_import(self):
         from .services.epub_import import EpubImportService
 

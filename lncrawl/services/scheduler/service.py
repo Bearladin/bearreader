@@ -69,7 +69,7 @@ class JobScheduler:
 
     def stop(self):
         with self._state_lock:
-            if not self.running:
+            if not self._threads:
                 return
             self._signal.set()
             JobRunner.cancel_all()
@@ -82,6 +82,17 @@ class JobScheduler:
             logger.info("Scheduler stopped")
             n_report = gc.collect()
             logger.info(f"GC report: {n_report}")
+
+    def request_desktop_shutdown(self) -> int:
+        """Signal workers and persist cancellation without waiting for joins."""
+        with self._state_lock:
+            if not self._threads:
+                return 0
+            self._signal.set()
+            JobRunner.cancel_all()
+        canceled = ctx.jobs.cancel_active_for_shutdown()
+        logger.info(f"Desktop shutdown requested; canceled {canceled} active job(s)")
+        return canceled
 
     def stop_job(self, job_id: str):
         JobRunner.cancel(job_id)

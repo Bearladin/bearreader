@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 import logging
 import os
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import typer
 from typing_extensions import Annotated
@@ -29,6 +29,7 @@ def run_server(
     watch: bool,
     workers: int,
     startup_log_handler: Optional[logging.Handler] = None,
+    on_server_created: Optional[Callable[[Any], None]] = None,
 ) -> None:
     import uvicorn
 
@@ -50,7 +51,10 @@ def run_server(
     else:
         from ..server.app import app as server_app
 
-        uvicorn.run(server_app, **options)
+        server = uvicorn.Server(uvicorn.Config(server_app, **options))
+        if on_server_created is not None:
+            on_server_created(server)
+        server.run()
 
 
 @app.command(help="Run web server.")
