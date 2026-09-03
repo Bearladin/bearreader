@@ -23,7 +23,7 @@ const entries: ChangeEntry[] = [
         外部网站统一交给系统默认浏览器，本地页面与导出文件继续留在 BearReader；外部网页不再被误认为客户端仍然开启。
       </span>,
       <span key="uukanshu-source">
-        新增可按书名搜索的 UU看书繁体书源 uukanshu.cc，支持作品信息、封面、完整目录和正文抓取，并保留旧 UU看书书源记录。
+        新增可按书名搜索的繁体书源 uukanshu.cc，支持作品信息、封面、完整目录和正文抓取；旧书源记录保留不变。
       </span>,
       <span key="source-cache">
         绿色版更新后会立即显示最新书源列表，不再因为浏览器缓存继续显示上一版的书源数量。

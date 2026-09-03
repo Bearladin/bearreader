@@ -67,6 +67,10 @@ const technicalTokens = [
   'HTML',
   'HTTP',
   'HTTPS',
+  'Chrome',
+  'Edge',
+  'http://',
+  'https://',
   'ID',
   'IP',
   'JSON',
@@ -120,6 +124,8 @@ const technicalTokens = [
   'backendtool.exe',
   'xbanxia',
   'display-mode: standalone',
+  // 朗读分段定位的正文容器选择器（技术构造，非界面文案）
+  'p, li, blockquote, h1, h2, h3, h4, h5, h6, pre',
   'YYYY/M/D HH:mm',
   'Edge-TTS',
   'Cloudflare',
@@ -133,6 +139,7 @@ const technicalTokens = [
   'mayiwsk.com',
   'www.mayiwsk.com',
   'nieba.net',
+  'uukanshu.cc',
 ];
 
 const exactTechnicalPhrases = new Set([
