@@ -9,6 +9,8 @@ function getProgressStatus(job: Job): ProgressProps['status'] {
       return 'active';
     case JobStatus.SUCCESS:
       return 'success';
+    case JobStatus.PARTIAL:
+      return 'normal';
     case JobStatus.FAILED:
     case JobStatus.CANCELED:
       return 'exception';
@@ -28,7 +30,13 @@ export const JobProgressCircle: React.FC<
       type="circle"
       percent={job.progress || 0}
       status={getProgressStatus(job)}
-      strokeColor={job.failed > 0 ? token.colorError : token.colorSuccess}
+      strokeColor={
+        job.status === JobStatus.PARTIAL
+          ? token.colorWarning
+          : job.failed > 0
+            ? token.colorError
+            : token.colorSuccess
+      }
     />
   );
 };
@@ -46,7 +54,15 @@ export const JobProgressLine: React.FC<
       type="line"
       status={getProgressStatus(job)}
       percent={Math.round(job.progress || 0)}
-      strokeColor={job.failed > 0 ? token.colorError : job.is_done ? token.colorSuccess : token.colorInfo}
+      strokeColor={
+        job.status === JobStatus.PARTIAL
+          ? token.colorWarning
+          : job.failed > 0
+            ? token.colorError
+            : job.is_done
+              ? token.colorSuccess
+              : token.colorInfo
+      }
     />
   );
 };

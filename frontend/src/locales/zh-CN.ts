@@ -42,6 +42,7 @@ export const enumLabels = {
     [JobStatus.FAILED]: '失败',
     [JobStatus.CANCELED]: '已取消',
     [JobStatus.PAUSED]: '已暂停',
+    [JobStatus.PARTIAL]: '部分完成',
   } satisfies Record<JobStatus, string>,
   jobType: {
     [JobType.NOVEL]: '小说',

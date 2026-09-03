@@ -8,9 +8,16 @@ import { Reader } from '@/store/_reader';
 import type { ReadChapter } from '@/types';
 import { message } from 'antd';
 import axios from 'axios';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
+import { buildTtsSegments, type TtsSegment } from './ttsSegments';
 
 const DEFAULT_VOICE = 'zh-CN-XiaoxiaoNeural';
 const PREFETCH_AHEAD = 3; // 预取后续段落数（边合成边播的缓冲）
@@ -29,7 +36,7 @@ interface ActivePlayer {
  * 必须联网；合成失败时提示并停止朗读。
  */
 function useEdgeTtsSpeech(
-  contentEl: HTMLDivElement | null,
+  speechSegments: TtsSegment[],
   data: ReadChapter
 ) {
   const navigate = useNavigate();
@@ -58,7 +65,7 @@ function useEdgeTtsSpeech(
       const pending = inflightAudios.current.get(idx);
       if (pending) return pending;
 
-      const text = contentEl?.children[idx]?.textContent?.trim();
+      const text = speechSegments[idx]?.text;
       if (!text) {
         throw new Error('空段落');
       }
@@ -98,7 +105,7 @@ function useEdgeTtsSpeech(
         }
       }
     },
-    [contentEl, effectiveVoice, voiceSpeed]
+    [speechSegments, effectiveVoice, voiceSpeed]
   );
 
   const stopPlayer = useCallback(() => {
@@ -210,11 +217,11 @@ function useEdgeTtsSpeech(
 
   // 后台预取：边合成边播的缓冲
   useEffect(() => {
-    if (!speaking || !contentEl) return;
-    const count = contentEl.children.length;
+    if (!speaking || speechSegments.length === 0) return;
+    const count = speechSegments.length;
     const stop = Math.min(position + 1 + PREFETCH_AHEAD, count);
     for (let i = position + 1; i < stop; i += 1) {
-      const text = contentEl.children[i]?.textContent?.trim();
+      const text = speechSegments[i]?.text;
       if (!text) continue;
       const cached = audioCache.current.get(i);
       const pending = inflightAudios.current.get(i);
@@ -223,19 +230,19 @@ function useEdgeTtsSpeech(
         // 预取失败静默，主循环会重试
       });
     }
-  }, [speaking, position, contentEl, ensureAudio]);
+  }, [speaking, position, speechSegments, ensureAudio]);
 
   // 开读预热：进入章节即后台合成第 0 段。edge-tts 单句合成本身要
   // ~2.5s（接口固定握手延迟），预热让用户点击朗读时首段已就绪、
   // 几乎立即出声。合成失败静默（点击时主循环会重试）。
   useEffect(() => {
-    if (!contentEl) return;
+    if (speechSegments.length === 0) return;
     void ensureAudio(0).catch(() => {});
-  }, [contentEl, ensureAudio]);
+  }, [speechSegments, ensureAudio]);
 
   // 主朗读循环（段落节拍）：合成 → 播放 → 句间停顿 → 下一段
   useEffect(() => {
-    if (!speaking || !contentEl || !data.content) {
+    if (!speaking || speechSegments.length === 0 || !data.content) {
       return;
     }
     stoppedRef.current = false;
@@ -243,7 +250,7 @@ function useEdgeTtsSpeech(
     let tid: ReturnType<typeof setTimeout> | undefined;
 
     const playSection = async () => {
-      const count = contentEl!.children.length;
+      const count = speechSegments.length;
       if (position >= count) {
         store.dispatch(Reader.action.setSepakPosition(0));
         if (data.next_id) {
@@ -254,7 +261,7 @@ function useEdgeTtsSpeech(
         return;
       }
 
-      const text = contentEl!.children[position]?.textContent?.trim();
+      const text = speechSegments[position]?.text;
       if (!text) {
         store.dispatch(Reader.action.setSepakPosition(position + 1));
         return;
@@ -293,7 +300,7 @@ function useEdgeTtsSpeech(
     };
   }, [
     speaking,
-    contentEl,
+    speechSegments,
     position,
     data,
     voicePause,
@@ -310,9 +317,10 @@ export const ReaderVerticalContent: React.FC<{
   const token = useSelector(Auth.select.authToken);
   const speaking = useSelector(Reader.select.speaking);
   const position = useSelector(Reader.select.speakPosition);
-  const [contentEl, setContentEl] = useState<HTMLDivElement | null>(null);
-
-  useEdgeTtsSpeech(contentEl, data);
+  const [contentTarget, setContentTarget] = useState<{
+    element: HTMLDivElement;
+    contentKey: string;
+  }>();
 
   const contentHTML = useMemo(() => {
     if (!token || !data.content) {
@@ -328,28 +336,61 @@ export const ReaderVerticalContent: React.FC<{
     return doc.body.innerHTML;
   }, [data.content, data.novel.id, token]);
 
+  const isImportedBook =
+    data.novel.extra?.imported === true &&
+    (data.novel.extra.source_format === 'epub' ||
+      data.novel.extra.source_format === 'txt');
+  const contentRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      if (!element) return;
+      setContentTarget((current) =>
+        current?.element === element && current.contentKey === contentHTML
+          ? current
+          : { element, contentKey: contentHTML }
+      );
+    },
+    [contentHTML]
+  );
+  const contentEl = contentTarget?.element ?? null;
+  const speechSegments = useMemo(
+    () =>
+      buildTtsSegments(contentTarget?.element ?? null, {
+        imported: isImportedBook,
+        chapterTitle: data.chapter.title,
+      }),
+    [contentTarget, data.chapter.title, isImportedBook]
+  );
+
+  useEdgeTtsSpeech(speechSegments, data);
+
   useEffect(() => {
     if (!speaking) return;
     const fid = requestAnimationFrame(() => {
-      const childEl = contentEl?.children[position];
+      const childEl = speechSegments[position]?.element;
       childEl?.setAttribute('data-focus', 'true');
       childEl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
     return () => {
       cancelAnimationFrame(fid);
-      const childEl = contentEl?.children[position];
+      const childEl = speechSegments[position]?.element;
       childEl?.removeAttribute('data-focus');
     };
-  }, [speaking, position, contentEl]);
+  }, [speaking, position, speechSegments]);
 
   const handleClick = (e: React.MouseEvent<HTMLElement>) => {
-    let target = e.target as HTMLElement | null;
+    const target = e.target as HTMLElement | null;
     if (!contentEl || !contentEl.contains(target)) return;
-    while (target && target.parentElement !== contentEl) {
-      target = target.parentElement!;
-    }
     if (target) {
-      const index = Array.prototype.indexOf.call(contentEl.children, target);
+      let clicked: HTMLElement | null = target;
+      let index = -1;
+      while (clicked && clicked !== contentEl.parentElement) {
+        index = speechSegments.findIndex(
+          (segment) => segment.element === clicked
+        );
+        if (index >= 0 || clicked === contentEl) break;
+        clicked = clicked.parentElement;
+      }
+      if (index < 0) return;
       store.dispatch(Reader.action.setSepakPosition(index));
     }
   };
@@ -357,7 +398,7 @@ export const ReaderVerticalContent: React.FC<{
   return (
     <div
       id="chapter-content"
-      ref={setContentEl}
+      ref={contentRef}
       dangerouslySetInnerHTML={{
         __html: contentHTML,
       }}

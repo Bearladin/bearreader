@@ -8,6 +8,11 @@ from ._base import AbortedException, BatchHandler, HandlerException
 
 
 class SearchSourceHandler(BatchHandler):
+    # A metadata child can fail after the site search has already produced a
+    # useful result.  Keep that outcome partial instead of discarding it as an
+    # entirely failed source search.
+    fail_if_all_children_fail = False
+
     @staticmethod
     def can_activate(job) -> bool:
         return job.type == JobType.SEARCH_SOURCE
@@ -54,6 +59,10 @@ class SearchSourceHandler(BatchHandler):
             query=query,
             domain=domain,
             signal=self.signal,
+        )
+        self._set_extra(
+            search_completed=True,
+            search_result_count=len(results),
         )
         if not results:
             return []

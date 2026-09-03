@@ -27,6 +27,8 @@ class SearchAllSourcesHandler(BatchHandler):
         if not domains:
             return
 
+        self._set_extra(search_source_total=len(sources))
+
         domain_usage = ctx.novels.list_domains()
         domains.sort(key=lambda x: domain_usage.get(x) or 0, reverse=True)
 

@@ -2,6 +2,7 @@ import { ArtifactListCard } from '@/components/ArtifactList/ArtifactListCard';
 import { ErrorState } from '@/components/Loading/ErrorState';
 import { LoadingState } from '@/components/Loading/LoadingState';
 import {
+  JobType,
   type Artifact,
   type Chapter,
   type Job,
@@ -175,7 +176,10 @@ export const JobDetailsPage: React.FC<any> = () => {
       {chapter && <ChapterDetailsCard chapter={chapter} />}
       {artifact && <ArtifactListCard artifacts={[artifact]} />}
 
-      <SearchResultsCard job={job} />
+      {(job.type === JobType.SEARCH_SOURCE ||
+        job.type === JobType.SEARCH_ALL_SOURCES) && (
+        <SearchResultsCard job={job} />
+      )}
 
       <JobListPage
         key={job.id + job.is_done}

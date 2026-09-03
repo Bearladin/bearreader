@@ -157,6 +157,16 @@ export interface Job extends _Base {
       url: string;
       info?: string;
     }[];
+    search_completed?: boolean;
+    search_result_count?: number;
+    search_source_total?: number;
+    search_sources?: Record<
+      string,
+      {
+        state: 'pending' | 'completed' | 'partial' | 'failed';
+        result_count: number;
+      }
+    >;
     import_session_id?: string;
     original_name?: string;
     authors?: string;

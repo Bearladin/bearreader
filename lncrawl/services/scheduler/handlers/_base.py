@@ -168,6 +168,8 @@ class BaseHandler(ABC):
 #                           Batch Requests                           #
 # ------------------------------------------------------------------ #
 class BatchHandler(BaseHandler):
+    fail_if_all_children_fail = True
+
     def __init__(
         self,
         job: Job,
@@ -185,6 +187,12 @@ class BatchHandler(BaseHandler):
                 if not job.is_done:
                     break
             else:
+                if (
+                    self.fail_if_all_children_fail
+                    and self.children
+                    and all(job.status == JobStatus.FAILED for job in self.children)
+                ):
+                    return self._set_failure("所有关联任务均执行失败")
                 return self._set_success()
 
         return self._guarded(self._increment)

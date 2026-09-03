@@ -108,6 +108,7 @@ class JobService:
 
             total = sess.exec(cnt).one()
             items = sess.exec(stmt).all()
+            self._decorate_search_summaries(sess, items)
 
             return Paginated(
                 total=total,
@@ -125,7 +126,64 @@ class JobService:
             job = sess.get(Job, job_id)
             if not job:
                 raise ServerErrors.no_such_job
+            self._decorate_search_summaries(sess, [job])
             return job
+
+    @staticmethod
+    def _decorate_search_summaries(sess: Session, jobs: Iterable[Job]) -> None:
+        """Attach live source-search counts without polluting progress totals.
+
+        A search parent owns one scheduling unit and may also gain metadata jobs,
+        so ``failed / total`` is not a truthful source count.  The response-only
+        summary below is derived from direct SEARCH_SOURCE children instead.
+        """
+        search_parents = [job for job in jobs if job.type == JobType.SEARCH_ALL_SOURCES]
+        if not search_parents:
+            return
+        parent_ids = [job.id for job in search_parents]
+        children = sess.exec(
+            sq.select(Job).where(
+                sq.col(Job.parent_job_id).in_(parent_ids),
+                Job.type == JobType.SEARCH_SOURCE,
+            )
+        ).all()
+        by_parent: Dict[str, List[Job]] = {job_id: [] for job_id in parent_ids}
+        for child in children:
+            if child.parent_job_id in by_parent:
+                by_parent[child.parent_job_id].append(child)
+        for parent in search_parents:
+            source_jobs = by_parent[parent.id]
+            summary = {}
+            for child in source_jobs:
+                domain = str(child.extra.get("domain") or child.domain or child.id)
+                search_completed = bool(child.extra.get("search_completed"))
+                if child.status == JobStatus.PARTIAL or (search_completed and child.failed > 0):
+                    state = "partial"
+                elif child.status == JobStatus.FAILED:
+                    state = "failed"
+                elif search_completed or (
+                    child.is_done and child.status in (JobStatus.SUCCESS, JobStatus.PARTIAL)
+                ):
+                    state = "completed"
+                else:
+                    state = "pending"
+                summary[domain] = {
+                    "state": state,
+                    "result_count": int(child.extra.get("search_result_count") or 0),
+                }
+            parent.extra = {
+                **parent.extra,
+                "search_source_total": int(
+                    parent.extra.get("search_source_total") or len(source_jobs)
+                ),
+                "search_sources": summary,
+            }
+            if parent.is_done and parent.status == JobStatus.SUCCESS:
+                states = [source["state"] for source in summary.values()]
+                if states and all(state == "failed" for state in states):
+                    parent.status = JobStatus.FAILED
+                elif parent.failed > 0 or any(state in ("failed", "partial") for state in states):
+                    parent.status = JobStatus.PARTIAL
 
     def get_user_id(self, job_id: str) -> Optional[str]:
         with ctx.db.session() as sess:
@@ -1111,8 +1169,20 @@ class JobService:
         sa_total = total
         sa_failed = failed
         sa_is_done = sa_done == sa_total
+        sa_search_produced_outcome = sq.and_(
+            Job.type == JobType.SEARCH_SOURCE,
+            Job.extra["search_completed"].as_boolean().is_(True),
+        )
+        sa_all_work_failed = sq.and_(
+            sa_is_done,
+            sa_total > 1,
+            sa_failed >= sa_total - 1,
+            sq.not_(sa_search_produced_outcome),
+        )
 
         sa_status = sq.case(
+            (sa_all_work_failed, JobStatus.FAILED),
+            (sq.and_(sa_is_done, sa_failed > 0), JobStatus.PARTIAL),
             (sa_is_done, JobStatus.SUCCESS),
             else_=Job.status,
         )

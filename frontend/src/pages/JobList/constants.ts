@@ -17,6 +17,11 @@ export const JobStatusFilterParams = [
     params: { status: JobStatus.FAILED },
   },
   {
+    value: 'partial',
+    label: enumLabels.jobStatus[JobStatus.PARTIAL],
+    params: { status: JobStatus.PARTIAL },
+  },
+  {
     value: 'canceled',
     label: enumLabels.jobStatus[JobStatus.CANCELED],
     params: { status: JobStatus.CANCELED },

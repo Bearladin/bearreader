@@ -25,6 +25,7 @@ export const JobStatus = {
   FAILED: 3,
   CANCELED: 4,
   PAUSED: 5,
+  PARTIAL: 6,
 };
 export type JobStatus = (typeof JobStatus)[keyof typeof JobStatus];
 

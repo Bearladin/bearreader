@@ -1,5 +1,5 @@
 import { enumLabels } from '@/locales/zh-CN';
-import { JobStatus, type Job } from '@/types';
+import { JobStatus, JobType, type Job } from '@/types';
 import {
   CheckOutlined,
   CloseOutlined,
@@ -27,7 +27,11 @@ export const JobStatusTag: React.FC<{ job: Job }> = ({ job }) => {
     case JobStatus.SUCCESS:
       return (
         <Tag icon={<CheckOutlined />} color="orange">
-          {enumLabels.jobStatus[job.status]}
+          {(job.type === JobType.SEARCH_SOURCE ||
+            job.type === JobType.SEARCH_ALL_SOURCES) &&
+          (job.extra.search_results?.length ?? 0) === 0
+            ? '已完成 · 未找到'
+            : enumLabels.jobStatus[job.status]}
         </Tag>
       );
     case JobStatus.CANCELED:
@@ -39,6 +43,12 @@ export const JobStatusTag: React.FC<{ job: Job }> = ({ job }) => {
     case JobStatus.FAILED:
       return (
         <Tag icon={<WarningOutlined />} color="red">
+          {enumLabels.jobStatus[job.status]}
+        </Tag>
+      );
+    case JobStatus.PARTIAL:
+      return (
+        <Tag icon={<WarningOutlined />} color="warning">
           {enumLabels.jobStatus[job.status]}
         </Tag>
       );
