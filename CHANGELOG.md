@@ -4,11 +4,28 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.3.2] - 2026-09-02
+## [1.3.4] - 2026-09-03
 
 ### Added
 
 - **新增 UU看书繁体书源** — `uukanshu.cc` 支持简繁体书名搜索、作品元数据、完整目录和正文抓取，并在书源首页紧随蚂蚁文学展示。
+
+### Changed
+
+- **桌面关闭与立即重开改为可信窗口加短心跳兜底** — 启动器不再依赖全局标题或两分钟 ZOMBIE 计时，只信任本次 Chromium 进程树和绑定会话；关闭后约 10–15 秒兜底退出，立即重开会等待旧实例安全释放后自动接管，且绝不按名称结束用户的 Chrome/Edge。
+- **桌面外链明确交给系统默认浏览器** — 应用模式只把外部 HTTP/HTTPS 地址送入受 LOCAL 管理员权限保护的系统打开接口，本地页面和导出文件仍留在 BearReader，外部网站不再延长专用浏览器进程的生命周期。
+
+### Fixed
+
+- **绿色版更新后立即显示最新书源目录** — 书源接口不再把旧列表缓存四小时，前端请求同时携带刷新序号并要求重新验证，避免同一 localhost 端口和浏览器 profile 沿用上一版的书源列表。
+- **任务完成状态与书名搜索结果不再混淆** — 上级任务会区分成功、部分完成和失败，书源统计不再包含调度任务；未找到、结果不完整和全部搜索失败使用克制但醒目的中文提示，并说明仍可手动提交其他书源的目录页 URL。
+- **导入 EPUB/TXT 的长章节可以正常朗读** — 仅对导入书籍按正文块和标点拆分语音请求并保留 2,000 字后端上限，修复单个外层容器过长导致的 422，现有抓取小说的文字分段保持不变。
+- **朗读段落重新显示定位边框并跟随滚动** — 抓取小说恢复从实时顶层正文定位，导入小说允许高亮嵌套段落并拒绝失效节点，使上一段、下一段、点击定位和阅读位置记忆重新与实际朗读位置一致。
+
+## [1.3.2] - 2026-09-02
+
+### Added
+
 - **A close confirmation before the app window shuts** — Clicking X or Alt+F4 in app mode first asks the browser's leave-confirmation dialog, so an accidental click cannot kill a running reading or download session; a "关闭时确认" switch in the reader settings (on by default) turns it off. The service worker's self-reload on updates stays silent — it is lossless and must not ask.
 - **The app-mode browser no longer bloats the data directory** — The window is an Edge app profile that used to accumulate hundreds of MB of wallet/shopping/visual-search components and update caches inside the app data folder; launch flags now disable those side components while keeping rendering, cookies, sessions and Safe Browsing untouched.
 - **本地 EPUB 导入** — “全部小说”支持拖拽或文件选择导入单个 EPUB，导入前可预览并编辑书名/作者；有封面时提取保存，无封面时使用动态占位封面，完成后直接打开小说详情。
@@ -18,17 +35,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 
 - **The job details back-link now says "上级任务请求"** — Renames the old "父任务请求" link so it matches the existing cancellation wording.
-- **桌面外链明确交给系统默认浏览器** — 应用模式只把外部 HTTP/HTTPS 地址送入受 LOCAL 管理员权限保护的系统打开接口，本地页面和导出文件仍留在 BearReader，外部网站不再延长专用浏览器进程的生命周期。
 
 ### Fixed
 
-- **任务完成状态与书名搜索结果不再混淆** — 上级任务会区分成功、部分完成和失败，书源统计不再包含调度任务；未找到、结果不完整和全部搜索失败使用克制但醒目的中文提示，并说明仍可手动提交其他书源的目录页 URL。
-- **导入 EPUB/TXT 的长章节可以正常朗读** — 仅对导入书籍按正文块和标点拆分语音请求并保留 2,000 字后端上限，修复单个外层容器过长导致的 422，现有抓取小说的朗读分段保持不变。
-- **绿色版更新后立即显示最新书源目录** — 书源接口不再把旧列表缓存四小时，前端请求同时携带刷新序号并要求重新验证，避免同一 localhost 端口和浏览器 profile 沿用上一版的书源列表。
 - **本地导入过程更清晰稳定** — 禁止浏览器翻译应用界面，导入弹窗保持紧凑并显示节流后的真实分析与保存进度，EPUB 正文开头与阅读器完全重复的章节标题会被安全隐藏。
 - **本地 EPUB/TXT 上传恢复正常** — 移除把文件表单错误序列化为 JSON 的全局请求头，并让参数验证错误显示具体原因。
 - **本地书架界面去除多用户残留** — 新建书架不再提供公开选项，卡片不再显示公开状态或本地管理员所有者信息，小说目录也移除不符合中文阅读习惯的字符序书名排序。
-- **桌面关闭与立即重开不再依赖全局标题或两分钟 ZOMBIE 计时** — 启动器只信任本次 Chromium 进程树拥有的 BearReader HWND，窗口不可追踪时才使用绑定随机会话的 5 秒心跳（关闭约 10 秒、失联约 15 秒兜底）；第二次启动会聚焦仍存活的窗口或让已关闭实例跳过心跳等待，退出时协作取消任务并给 Uvicorn 最多 5 秒完成资源收尾。
+- **The desktop launcher no longer lingers as a zombie process** — When every exit signal misfires at once (window handed to an untracked process, title probe hitting a foreign window, bye beacon lost), the keep-alive loop used to wait forever while holding the single-instance lock; it now winds down after 2 minutes without a window sighting and records a diagnostic, so a relaunch after an unclean close recovers quickly.
+- **"Already running" is now visible instead of a silent exit** — When the single-instance lock stays held after the takeover wait, a self-dismissing message box tells the user to end the leftover processes instead of double-clicking doing nothing.
 - **A damaged legacy database no longer breaks the whole source list** — The per-domain novel count is decorative; when its query fails, sources still load without counts and the failure is logged, instead of failing the entire endpoint (previously required wiping the data directory).
 - **EPUB 导入失败与取消状态保持一致** — 状态更新采用条件迁移，提交目标可从中断中恢复，过期会话和孤儿文件会被清理，内部导入任务不能被通用重放或误取消。
 - **An empty source registry can no longer masquerade as a healthy startup** — A damaged or quarantined source bundle now fails before replacing the active registry, reload failures keep the previous sources live, and the health endpoint reports loaded crawler and domain counts.

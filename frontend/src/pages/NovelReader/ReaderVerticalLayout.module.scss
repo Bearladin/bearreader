@@ -17,7 +17,7 @@
         cursor: pointer;
       }
 
-      & > [data-focus] {
+      & [data-focus] {
         border-radius: 2px;
         outline-offset: 7px;
         outline: 1px solid currentColor;

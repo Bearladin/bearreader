@@ -5,6 +5,30 @@ export interface TtsSegment {
   element: HTMLElement;
 }
 
+export function selectLiveTtsSegments(
+  cached: TtsSegment[],
+  imported: boolean,
+  rebuildImported: () => TtsSegment[]
+): TtsSegment[] {
+  return imported ? rebuildImported() : cached;
+}
+
+export function resolveTtsFocusElement(
+  contentEl: HTMLDivElement | null,
+  segments: TtsSegment[],
+  position: number,
+  imported: boolean
+): HTMLElement | null {
+  if (!contentEl) return null;
+  const element = imported
+    ? segments[position]?.element
+    : (contentEl.children.item(position) as HTMLElement | null);
+  if (!element || !element.isConnected || !contentEl.contains(element)) {
+    return null;
+  }
+  return element;
+}
+
 interface BuildTtsSegmentsOptions {
   imported: boolean;
   chapterTitle: string;

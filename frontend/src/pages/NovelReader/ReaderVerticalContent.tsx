@@ -17,7 +17,12 @@ import {
 } from 'react';
 import { useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { buildTtsSegments, type TtsSegment } from './ttsSegments';
+import {
+  buildTtsSegments,
+  resolveTtsFocusElement,
+  selectLiveTtsSegments,
+  type TtsSegment,
+} from './ttsSegments';
 
 const DEFAULT_VOICE = 'zh-CN-XiaoxiaoNeural';
 const PREFETCH_AHEAD = 3; // 预取后续段落数（边合成边播的缓冲）
@@ -360,31 +365,69 @@ export const ReaderVerticalContent: React.FC<{
       }),
     [contentTarget, data.chapter.title, isImportedBook]
   );
+  const getLiveSpeechSegments = useCallback(
+    () =>
+      selectLiveTtsSegments(speechSegments, isImportedBook, () =>
+        buildTtsSegments(contentEl, {
+          imported: true,
+          chapterTitle: data.chapter.title,
+        })
+      ),
+    [contentEl, data.chapter.title, isImportedBook, speechSegments]
+  );
 
   useEdgeTtsSpeech(speechSegments, data);
 
   useEffect(() => {
     if (!speaking) return;
     const fid = requestAnimationFrame(() => {
-      const childEl = speechSegments[position]?.element;
+      const liveSegments = getLiveSpeechSegments();
+      const childEl = resolveTtsFocusElement(
+        contentEl,
+        liveSegments,
+        position,
+        isImportedBook
+      );
       childEl?.setAttribute('data-focus', 'true');
       childEl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
     return () => {
       cancelAnimationFrame(fid);
-      const childEl = speechSegments[position]?.element;
+      const liveSegments = getLiveSpeechSegments();
+      const childEl = resolveTtsFocusElement(
+        contentEl,
+        liveSegments,
+        position,
+        isImportedBook
+      );
       childEl?.removeAttribute('data-focus');
     };
-  }, [speaking, position, speechSegments]);
+  }, [speaking, position, contentEl, isImportedBook, getLiveSpeechSegments]);
 
   const handleClick = (e: React.MouseEvent<HTMLElement>) => {
     const target = e.target as HTMLElement | null;
     if (!contentEl || !contentEl.contains(target)) return;
     if (target) {
+      if (!isImportedBook) {
+        let topLevel: HTMLElement | null = target;
+        while (topLevel && topLevel.parentElement !== contentEl) {
+          topLevel = topLevel.parentElement;
+        }
+        if (!topLevel) return;
+        const position = Array.prototype.indexOf.call(
+          contentEl.children,
+          topLevel
+        );
+        if (position >= 0) {
+          store.dispatch(Reader.action.setSepakPosition(position));
+        }
+        return;
+      }
+      const liveSegments = getLiveSpeechSegments();
       let clicked: HTMLElement | null = target;
       let index = -1;
       while (clicked && clicked !== contentEl.parentElement) {
-        index = speechSegments.findIndex(
+        index = liveSegments.findIndex(
           (segment) => segment.element === clicked
         );
         if (index >= 0 || clicked === contentEl) break;

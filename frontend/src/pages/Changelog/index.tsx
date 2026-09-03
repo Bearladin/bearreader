@@ -13,6 +13,33 @@ interface ChangeEntry {
 
 const entries: ChangeEntry[] = [
   {
+    version: '1.3.4',
+    date: '2026-09-03',
+    items: [
+      <span key="desktop-lifecycle">
+        关闭与立即重开更可靠：应用只识别本次启动的窗口和会话，关闭后快速结束后台并安全取消任务；立即重开会自动等待旧实例释放，不会误关普通 Chrome 或 Edge。
+      </span>,
+      <span key="external-browser">
+        外部网站统一交给系统默认浏览器，本地页面与导出文件继续留在 BearReader；外部网页不再被误认为客户端仍然开启。
+      </span>,
+      <span key="uukanshu-source">
+        新增可按书名搜索的 UU看书繁体书源 uukanshu.cc，支持作品信息、封面、完整目录和正文抓取，并保留旧 UU看书书源记录。
+      </span>,
+      <span key="source-cache">
+        绿色版更新后会立即显示最新书源列表，不再因为浏览器缓存继续显示上一版的书源数量。
+      </span>,
+      <span key="search-outcome">
+        任务状态新增「部分完成」；书名搜索会明确区分找到、未找到、结果不完整和全部失败，失败数量按实际书源计算，并提示仍可手动提交其他书源的目录页 URL。
+      </span>,
+      <span key="imported-tts">
+        导入的 EPUB/TXT 长章节现在会按正文段落和标点安全拆分朗读，避免整章超过限制导致 422；已经导入的书无需重新导入。
+      </span>,
+      <span key="tts-focus">
+        修复朗读定位回归：抓取小说和导入小说都会重新显示当前段落边框，上一段、下一段和点击正文时视图跟随实际朗读位置，滚动位置记忆继续有效。
+      </span>,
+    ],
+  },
+  {
     version: '1.3.2',
     date: '2026-09-02',
     items: [
