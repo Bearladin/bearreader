@@ -36,9 +36,9 @@ export const TutorialPage: React.FC<any> = () => {
           </li>
           <li>
             <Text strong>直接输入书名：</Text>
-            输入小说书名（2–50 个字），系统会自动按书名搜索。仅 www.mayiwsk.com
-            支持书名搜索。如果书名搜索找不到书，请到书源页面的其他书源中获取到具体的
-            URL。
+            输入小说书名（2–50 个字），系统会自动按书名搜索。www.mayiwsk.com 和
+            uukanshu.cc 支持书名搜索。如果书名搜索找不到书，请到书源页面的其他书源中获取到
+            具体的 URL。
           </li>
         </ul>
       </section>

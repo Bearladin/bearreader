@@ -3,6 +3,16 @@ import { stringifyError } from '@/utils/errors';
 import axios from 'axios';
 import { useCallback, useEffect, useState } from 'react';
 
+export function supportedSourcesRequest(refreshId: number) {
+  return {
+    url: '/api/meta/supported-sources',
+    config: {
+      params: { refresh: refreshId },
+      headers: { 'Cache-Control': 'no-cache' },
+    },
+  };
+}
+
 export function useSupportedSources() {
   const [refreshId, setRefreshId] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -30,9 +40,8 @@ export function useSupportedSources() {
     const fetchSupportedSources = async () => {
       try {
         setError(undefined);
-        const res = await axios.get<SourceItem[]>(
-          '/api/meta/supported-sources'
-        );
+        const request = supportedSourcesRequest(refreshId);
+        const res = await axios.get<SourceItem[]>(request.url, request.config);
         setData(res.data.sort((a, b) => a.domain.localeCompare(b.domain)));
         fetchNovelSources();
       } catch (err) {

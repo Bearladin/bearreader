@@ -23,6 +23,7 @@ export function getLanguageLabel(lang?: string): string {
  */
 const PINNED_DOMAINS = [
   'mayiwsk.com',
+  'uukanshu.cc',
   'dushulai.com',
   'shuquta.com',
   'nieba.net',

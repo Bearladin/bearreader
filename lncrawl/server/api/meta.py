@@ -25,7 +25,11 @@ def list_supported_sources():
         content=[item.model_dump() for item in result],
         headers={
             "ETag": str(ctx.sources.version),
-            "Cache-Control": "public, max-age=14400",
+            # The desktop browser profile survives portable upgrades and every
+            # build normally reuses localhost:31580. A fresh max-age response
+            # therefore hid newly bundled sources for four hours after an
+            # upgrade. The list is small and local, so never store it.
+            "Cache-Control": "private, no-store",
         },
     )
 

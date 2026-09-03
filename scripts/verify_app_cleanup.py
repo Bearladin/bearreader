@@ -155,6 +155,11 @@ def main() -> int:
                 return 1
             print(f"Immediate relaunch succeeded (browser pid={second_window[0]})")
 
+            # The first close above is the deliberate immediate-relaunch stress
+            # case. Let the replacement finish binding its trusted HWND before
+            # measuring the ordinary close-to-exit budget; closing in the first
+            # paint can legitimately take the 10s heartbeat fallback instead.
+            time.sleep(2)
             _close_window(second_window[1])
             if not _wait_for_exit(second, 8):
                 print("FAIL: second backend did not exit within 8s")

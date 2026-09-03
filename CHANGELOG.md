@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- **新增 UU看书繁体书源** — `uukanshu.cc` 支持简繁体书名搜索、作品元数据、完整目录和正文抓取，并在书源首页紧随蚂蚁文学展示。
 - **A close confirmation before the app window shuts** — Clicking X or Alt+F4 in app mode first asks the browser's leave-confirmation dialog, so an accidental click cannot kill a running reading or download session; a "关闭时确认" switch in the reader settings (on by default) turns it off. The service worker's self-reload on updates stays silent — it is lossless and must not ask.
 - **The app-mode browser no longer bloats the data directory** — The window is an Edge app profile that used to accumulate hundreds of MB of wallet/shopping/visual-search components and update caches inside the app data folder; launch flags now disable those side components while keeping rendering, cookies, sessions and Safe Browsing untouched.
 - **本地 EPUB 导入** — “全部小说”支持拖拽或文件选择导入单个 EPUB，导入前可预览并编辑书名/作者；有封面时提取保存，无封面时使用动态占位封面，完成后直接打开小说详情。
@@ -21,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- **绿色版更新后立即显示最新书源目录** — 书源接口不再把旧列表缓存四小时，前端请求同时携带刷新序号并要求重新验证，避免同一 localhost 端口和浏览器 profile 沿用上一版的书源列表。
 - **本地导入过程更清晰稳定** — 禁止浏览器翻译应用界面，导入弹窗保持紧凑并显示节流后的真实分析与保存进度，EPUB 正文开头与阅读器完全重复的章节标题会被安全隐藏。
 - **本地 EPUB/TXT 上传恢复正常** — 移除把文件表单错误序列化为 JSON 的全局请求头，并让参数验证错误显示具体原因。
 - **本地书架界面去除多用户残留** — 新建书架不再提供公开选项，卡片不再显示公开状态或本地管理员所有者信息，小说目录也移除不符合中文阅读习惯的字符序书名排序。
