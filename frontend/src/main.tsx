@@ -74,8 +74,28 @@ installPreloadRecovery({
 
 // The launcher issues the session id in the app URL. Beacons from stale tabs
 // or other localhost pages therefore cannot extend or terminate this run.
+// In-app navigation drops the URL params, and a later full reload (manual or
+// SW update) would then lose the session entirely — no heartbeat, no bye, no
+// external-link interception. Persist the session per browser tab so the
+// reloaded page re-registers everything under the SAME id; the backend's
+// random-per-launch session check still rejects stale sessions from old runs.
 const appParams = new URLSearchParams(window.location.search);
-const appSessionId = appParams.get('appSession') ?? '';
+let appSessionId = appParams.get('appSession') ?? '';
+if (appParams.has('app') && appSessionId) {
+  try {
+    window.sessionStorage.setItem('bearreader/app-session', appSessionId);
+  } catch {
+    // storage unavailable (privacy mode): URL-only, a reload drops the session
+  }
+} else if (appParams.has('app')) {
+  // Reload inside app mode without URL params: fall back to the tab session.
+  try {
+    appSessionId =
+      window.sessionStorage.getItem('bearreader/app-session') ?? '';
+  } catch {
+    appSessionId = '';
+  }
+}
 if (appParams.has('app') && appSessionId) {
   navigator.sendBeacon(`/api/app/ready/${appSessionId}`);
   const heartbeat = () => {

@@ -1797,9 +1797,17 @@ class EpubImportService:
                 body = (prepared_dir / str(item["body_path"])).read_text(encoding="utf-8")
                 for image_id in item.get("images") or []:
                     stored_image_id = sha256(f"{chapter.id}:{image_id}".encode()).hexdigest()[:32]
+                    # Replace BOTH the src filename and the alt identifier:
+                    # the reader resolves authenticated image URLs through
+                    # img.alt, and a stale alt makes the match fail so the
+                    # picture never loads (CR-04).
                     body = body.replace(
                         f"images/{image_id}.jpg",
                         f"images/{stored_image_id}.jpg",
+                    )
+                    body = body.replace(
+                        f'alt="{image_id}"',
+                        f'alt="{stored_image_id}"',
                     )
                 ctx.files.save_text(chapter.content_file, body)
                 chapters.append(chapter)

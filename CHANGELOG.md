@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Imported EPUB illustrations now display** — The import rewrote each picture's stored filename but left the stale identifier beside it, and the reader's authenticated-URL match failed on every body image; both identifiers are now rewritten at import, and already-imported books display without re-importing.
+- **A fully failed nested batch now reports failure** — "Fetch everything" whose every chapter failed settled as "partially complete" because the all-failed check subtracted only one scheduler unit; the settlement now looks at actual child outcomes.
+- **Search outcomes distinguish a user cancel from "nothing found"** — Cancelled searches said "no matching novels" and partial sources with results could be labelled "failed"; cancelled now shows its own message and partial sources count correctly.
+- **Continue-reading lands on the exact final position** — The scroll-position throttle dropped the last fast scroll and saved nothing on leave; a trailing write and a save-on-exit now capture the final offset.
+- **The desktop session survives a page reload** — After a reload inside the app window the heartbeat, close beacon and external-link interception silently stopped registering; the session id now falls back to the per-tab storage so a reloaded page re-registers everything.
+- **A lingering close signal no longer outranks a live window** — Cancelling the close confirmation and relaunching could tear down the still-running instance; a trusted window or live lease now wins over the stale signal.
+- **The cached-window fast path re-verifies its owner** — If Windows reuses a destroyed window handle for an unrelated window, the desktop could keep treating it as the app window; the fast path now re-checks process ownership.
+
 ## [1.3.4] - 2026-09-03
 
 ### Added

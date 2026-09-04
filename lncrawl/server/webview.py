@@ -284,7 +284,14 @@ def _start_server(
 
 
 def _stop_server(server_control: dict, server_thread: Thread) -> None:
-    """Cooperatively stop desktop work, then give lifespan five seconds."""
+    """Cooperatively stop desktop work, then wait for the server thread.
+
+    The five-second join is a wait BUDGET for the service thread's lifespan
+    teardown only — the cooperative cancellation and database updates that
+    run before it are synchronous and not covered by the budget, and Python
+    may still finish background pool tasks afterwards (CR-03). This is not a
+    hard process-exit deadline.
+    """
     with suppress(Exception):
         if "scheduler" in ctx.__dict__:
             ctx.scheduler.request_desktop_shutdown()
@@ -586,7 +593,14 @@ def _find_trusted_app_window(
         return int(pid.value)
 
     if known_hwnd and user32.IsWindow(known_hwnd) and user32.IsWindowVisible(known_hwnd):
-        if not user32.IsHungAppWindow(known_hwnd):
+        # Re-verify PID ownership on the fast path too: if the window was
+        # destroyed and Windows reused the handle for an unrelated window,
+        # treating it as ours would keep the app alive forever or focus a
+        # foreign window (CR-08). The check is one syscall; the slow path
+        # below re-scans when it fails.
+        if not user32.IsHungAppWindow(known_hwnd) and _pid_for(known_hwnd) in (
+            _trusted_browser_pids(proc) or set()
+        ):
             return known_hwnd
 
     trusted_pids = _trusted_browser_pids(proc)
@@ -659,9 +673,11 @@ def _keep_alive(
         browser_alive = bool(_trusted_browser_pids(proc))
 
         if instance_signals is not None and instance_signals.requested():
-            if closing_requested():
-                logger.info("Second launch accelerated a pending desktop close")
-                return
+            # A trusted window still alive outranks a lingering bye: the user
+            # may have cancelled the close confirmation (bye fires before the
+            # dialog resolves), and killing a live instance on the next launch
+            # would tear down a session the user kept. Only accelerate the
+            # close when no trusted window and no live lease remain.
             if found_hwnd is not None:
                 _focus_window(found_hwnd)
                 instance_signals.acknowledge()
@@ -669,6 +685,9 @@ def _keep_alive(
                 # Chromium handed the window to a process outside our tree;
                 # the live lease still proves an existing page owns this run.
                 instance_signals.acknowledge()
+            elif closing_requested():
+                logger.info("Second launch accelerated a pending desktop close")
+                return
             else:
                 logger.info("Second launch requested takeover after the app window closed")
                 return

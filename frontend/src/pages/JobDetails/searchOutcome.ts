@@ -6,7 +6,8 @@ export type SearchOutcomeKind =
   | 'found-partial'
   | 'not-found'
   | 'not-found-partial'
-  | 'failed';
+  | 'failed'
+  | 'canceled';
 
 export interface SearchOutcome {
   kind: SearchOutcomeKind;
@@ -36,15 +37,22 @@ export function getSearchOutcome(job: Job): SearchOutcome {
   const sourceCompleted = sources.filter(
     (source) => source.state === 'completed'
   ).length;
+  // A partial source finished its own search; only hard failures count
+  // toward sourceFailed here — the partial signal still flows through
+  // job.status / sourcePartial below (CR-06).
   const sourceFailed = sources.filter(
-    (source) => source.state === 'failed' || source.state === 'partial'
+    (source) => source.state === 'failed'
+  ).length;
+  const sourcePartial = sources.filter(
+    (source) => source.state === 'partial'
   ).length;
   return classify(
     job,
     resultCount,
     sourceTotal,
     sourceCompleted,
-    sourceFailed
+    sourceFailed,
+    sourcePartial
   );
 }
 
@@ -53,24 +61,33 @@ function classify(
   resultCount: number,
   sourceTotal: number,
   sourceCompleted: number,
-  sourceFailed: number
+  sourceFailed: number,
+  sourcePartial = 0
 ): SearchOutcome {
   let kind: SearchOutcomeKind;
   if (!job.is_done) {
     kind = 'running';
-  } else if (
-    job.status === JobStatus.FAILED ||
-    (sourceTotal > 0 && sourceFailed >= sourceTotal)
-  ) {
+  } else if (job.status === JobStatus.CANCELED) {
+    // The user aborted — do not present this as "searched and found nothing"
+    // (CR-06); results already collected, if any, are kept by the caller.
+    kind = 'canceled';
+  } else if (job.status === JobStatus.FAILED) {
+    kind = 'failed';
+  } else if (sourceTotal > 0 && sourceFailed >= sourceTotal) {
+    // Every source hard-failed its request.
     kind = 'failed';
   } else if (resultCount > 0) {
     kind =
-      job.status === JobStatus.PARTIAL || sourceFailed > 0
+      job.status === JobStatus.PARTIAL ||
+      sourceFailed > 0 ||
+      sourcePartial > 0
         ? 'found-partial'
         : 'found';
   } else {
     kind =
-      job.status === JobStatus.PARTIAL || sourceFailed > 0
+      job.status === JobStatus.PARTIAL ||
+      sourceFailed > 0 ||
+      sourcePartial > 0
         ? 'not-found-partial'
         : 'not-found';
   }

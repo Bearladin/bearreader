@@ -71,9 +71,19 @@ export const SearchResultsCard: React.FC<{ job: Job }> = ({ job }) => {
         description:
           '支持书名搜索的书源本次均未能返回结果。你仍可以前往其他书源网站搜索这本书，复制小说目录页 URL 后提交下载。',
       },
+      canceled: {
+        type: 'info' as const,
+        title: '搜索已取消',
+        description:
+          '本次搜索在完成前被取消。你可以重新执行搜索，或前往其他书源网站找到小说目录页 URL 后提交下载。',
+      },
     };
     const message = messages[
-      outcome.kind as 'not-found' | 'not-found-partial' | 'failed'
+      outcome.kind as
+        | 'not-found'
+        | 'not-found-partial'
+        | 'failed'
+        | 'canceled'
     ];
     return (
       <Card variant="outlined">

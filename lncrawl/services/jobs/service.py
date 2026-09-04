@@ -1173,10 +1173,24 @@ class JobService:
             Job.type == JobType.SEARCH_SOURCE,
             Job.extra["search_completed"].as_boolean().is_(True),
         )
+        # "All work failed" must look at actual child outcomes, not at
+        # arithmetic on totals: nested batches add several scheduler units,
+        # so `failed >= total - 1` undercounts them and a fully failed batch
+        # settles as PARTIAL (CR-05). A job whose every descendant job failed
+        # (or was canceled) is failed; any succeeded descendant keeps the
+        # existing success/partial settlement.
+        child = aliased(Job)
+        # EXISTS over a child-status subselect; correlated to the updated row
+        # via an explicit select to keep UPDATE ... FROM correlation unambiguous.
+        children_ok = sq.col(Job.id).in_(
+            sq.select(sq.col(child.parent_job_id)).where(
+                sq.col(child.status).in_([JobStatus.SUCCESS, JobStatus.PARTIAL, JobStatus.RUNNING])
+            )
+        )
         sa_all_work_failed = sq.and_(
             sa_is_done,
-            sa_total > 1,
-            sa_failed >= sa_total - 1,
+            sa_failed > 0,
+            sq.not_(children_ok),
             sq.not_(sa_search_produced_outcome),
         )
 

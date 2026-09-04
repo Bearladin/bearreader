@@ -298,15 +298,17 @@ export const NovelReaderPage: React.FC<any> = () => {
     }
   }, [chapterContent, chapterDone, chapterId]);
 
-  // Persist the reading offset (throttled) so "continue reading" reopens
-  // at the same spot. Only the currently opened chapter writes history.
+  // Persist the reading offset (throttled with a trailing write) so
+  // "continue reading" reopens at the same spot. Only the currently opened
+  // chapter writes history. A plain throttle used to drop the final fast
+  // scroll (CR-07): the last event inside the 500ms window was never saved,
+  // and leaving the page saved nothing at all.
   useEffect(() => {
     if (!data) return;
     let lastWrite = 0;
-    const onScroll = () => {
-      const now = Date.now();
-      if (now - lastWrite < 500) return;
-      lastWrite = now;
+    let trailingTimer: ReturnType<typeof setTimeout> | undefined;
+    const save = () => {
+      lastWrite = Date.now();
       const max = Math.max(
         0,
         document.documentElement.scrollHeight - window.innerHeight
@@ -319,8 +321,34 @@ export const NovelReaderPage: React.FC<any> = () => {
         })
       );
     };
+    const onScroll = () => {
+      const now = Date.now();
+      if (now - lastWrite >= 500) {
+        if (trailingTimer !== undefined) {
+          clearTimeout(trailingTimer);
+          trailingTimer = undefined;
+        }
+        save();
+        return;
+      }
+      // Inside the window: schedule/refresh a trailing write so the LAST
+      // position always lands, not just the first.
+      if (trailingTimer !== undefined) clearTimeout(trailingTimer);
+      trailingTimer = setTimeout(() => {
+        trailingTimer = undefined;
+        save();
+      }, 500);
+    };
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (trailingTimer !== undefined) clearTimeout(trailingTimer);
+      // Leaving the page (or switching chapters) saves the final position —
+      // the effect cleanup runs after the chapter identity changed, and the
+      // scroll restore double-rAF has its own cancel path, so a restore
+      // scroll cannot be mistaken for a user position here.
+      save();
+    };
   }, [data]);
 
   if (loading || (!error && id && data && data.chapter.id !== id)) {

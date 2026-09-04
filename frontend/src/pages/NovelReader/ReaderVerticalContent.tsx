@@ -334,8 +334,18 @@ export const ReaderVerticalContent: React.FC<{
     const parser = new DOMParser();
     const doc = parser.parseFromString(data.content, 'text/html');
     for (const img of doc.querySelectorAll('img')) {
-      if (!img.src.includes(img.alt)) continue;
-      img.src = `${API_BASE_URL}/static/novels/${data.novel.id}/images/${img.alt}.jpg?token=${token}`;
+      // The authenticated image URL is resolved through the identifier that
+      // src and alt share. Legacy imported chapters kept a stale alt after
+      // the src was rewritten to the stored id (CR-04), so fall back to the
+      // src stem when the pair does not match — no re-import needed.
+      let key = img.alt;
+      if (!key || !img.src.includes(key)) {
+        const match = img.src.match(/images\/([0-9a-f]+)\.jpg/i);
+        key = match?.[1] ?? '';
+      }
+      if (!key) continue;
+      img.src = `${API_BASE_URL}/static/novels/${data.novel.id}/images/${key}.jpg?token=${token}`;
+      img.alt = key;
       img.loading = 'lazy';
     }
     return doc.body.innerHTML;
