@@ -237,13 +237,31 @@ function useEdgeTtsSpeech(
     }
   }, [speaking, position, speechSegments, ensureAudio]);
 
-  // 开读预热：进入章节即后台合成第 0 段。edge-tts 单句合成本身要
-  // ~2.5s（接口固定握手延迟），预热让用户点击朗读时首段已就绪、
-  // 几乎立即出声。合成失败静默（点击时主循环会重试）。
+  // 音色/语速变更即暂停：两者都进同一个合成请求，但音频缓存键只有段落
+  // 序号——不清理的话，重开朗读会命中旧参数的缓存，听起来"切了没反应"。
+  // 暂停点即变更生效点：清空缓存后重新点朗读，从当前段全量用新参数合成
+  // （句间停顿不进合成请求、改了立即生效，不纳入本逻辑）。
+  const speechParamsRef = useRef(`${effectiveVoice}|${voiceSpeed}`);
+  useEffect(() => {
+    const next = `${effectiveVoice}|${voiceSpeed}`;
+    if (speechParamsRef.current === next) return;
+    speechParamsRef.current = next;
+    // 未在朗读时只清缓存（下次开始自然用新参数）；朗读中则同时暂停。
+    if (speaking) {
+      store.dispatch(Reader.action.setSpeaking(false));
+    }
+    clearAudioResources(false);
+  }, [effectiveVoice, voiceSpeed, speaking, clearAudioResources]);
+
+  // 开读预热：进入章节即后台合成"当前停留段"。edge-tts 单句合成本身要
+  // ~2.5s（接口固定握手延迟），预热让用户点击朗读时首段已就绪、几乎立即
+  // 出声。预热目标跟随 speakPosition：停在深段切音色/语速后，重新点朗读
+  // 从停留段出声，预热的正是那一段（合成失败静默，点击时主循环会重试）。
   useEffect(() => {
     if (speechSegments.length === 0) return;
-    void ensureAudio(0).catch(() => {});
-  }, [speechSegments, ensureAudio]);
+    const target = Math.min(position, speechSegments.length - 1);
+    void ensureAudio(target).catch(() => {});
+  }, [position, speechSegments, ensureAudio]);
 
   // 主朗读循环（段落节拍）：合成 → 播放 → 句间停顿 → 下一段
   useEffect(() => {

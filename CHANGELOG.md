@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Voice and speed changes now take effect on restart** — Changing the TTS voice or speed mid-read used to keep playing the old cached audio ("no reaction" until several segments later); the change now pauses the reading and clears the audio cache, so pressing read again resumes from the current paragraph with the new parameters, pre-warmed so the first sentence is nearly instant.
+
 ### Fixed
 
 - **Imported EPUB illustrations now display** — The import rewrote each picture's stored filename but left the stale identifier beside it, and the reader's authenticated-URL match failed on every body image; both identifiers are now rewritten at import, and already-imported books display without re-importing.
